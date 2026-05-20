@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { sb } from '../../lib/supabase'
 import logoImg from '../../assets/logo.png'
 import adminLogoImg from '../../assets/admin_logo.png'
+import Dropdown from './Dropdown'
 
 const ADMIN_EMAIL = 'marketing.dffoods@gmail.com'
 
@@ -90,6 +91,7 @@ export default function AdminLogin() {
   const nav = useNavigate()
 
   const [step,        setStep]        = useState('login')
+  const [role,        setRole]        = useState('Marketing')
   const [password,    setPassword]    = useState('')
   const [newPass,     setNewPass]     = useState('')
   const [confirmPass, setConfirmPass] = useState('')
@@ -109,14 +111,26 @@ export default function AdminLogin() {
     return () => subscription.unsubscribe()
   }, [])
 
-  /* ── Sign in ── */
+  /* ── Sign in ── verify the shared password against the backend ── */
   async function handleLogin(e) {
     e.preventDefault()
     setError(''); setLoading(true)
-    const { error: err } = await sb.auth.signInWithPassword({ email: ADMIN_EMAIL, password })
-    setLoading(false)
-    if (err) { setError('Incorrect password. Please try again.'); return }
-    nav('/admin')
+    try {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ department: role, password }),
+      })
+      const json = await res.json()
+      setLoading(false)
+      if (!json.ok) { setError('Incorrect password. Please try again.'); return }
+      localStorage.setItem('admin_authed', '1')
+      localStorage.setItem('admin_role', role)
+      nav('/admin')
+    } catch {
+      setLoading(false)
+      setError('Could not reach the server. Please try again.')
+    }
   }
 
   /* ── Send password reset email ── */
@@ -131,17 +145,28 @@ export default function AdminLogin() {
     setStep('sent')
   }
 
-  /* ── Reset password ── */
+  /* ── Reset password ── updates the shared password on the backend ── */
   async function handleReset(e) {
     e.preventDefault()
     if (newPass !== confirmPass) { setError('Passwords do not match.'); return }
     if (newPass.length < 6)     { setError('Password must be at least 6 characters.'); return }
     setError(''); setLoading(true)
-    const { error: err } = await sb.auth.updateUser({ password: newPass })
-    setLoading(false)
-    if (err) { setError('Failed to reset password. Try again.'); return }
-    setInfo('Password updated! Please sign in.')
-    setStep('login')
+    try {
+      const res = await fetch('/api/admin/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ department: role, password: newPass }),
+      })
+      const json = await res.json()
+      setLoading(false)
+      if (!json.ok) { setError(json.error || 'Failed to reset password. Try again.'); return }
+      setNewPass(''); setConfirmPass('')
+      setInfo(`${role} password updated! Please sign in.`)
+      setStep('login')
+    } catch {
+      setLoading(false)
+      setError('Could not reach the server. Please try again.')
+    }
   }
 
   const inputStyle = {
@@ -230,6 +255,15 @@ export default function AdminLogin() {
                 </div>
               )}
 
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize:'0.78rem', fontWeight:600, color:'#374151', display:'block', marginBottom:6 }}>Department</label>
+                <Dropdown
+                  value={role}
+                  options={['Marketing', 'R&D']}
+                  onChange={setRole}
+                />
+              </div>
+
               <div style={{ marginBottom: 8 }}>
                 <label style={{ fontSize:'0.78rem', fontWeight:600, color:'#374151', display:'block', marginBottom:6 }}>Password</label>
                 <div style={{ position:'relative' }}>
@@ -248,9 +282,9 @@ export default function AdminLogin() {
               </div>
 
               <div style={{ textAlign:'right', marginBottom:24 }}>
-                <button type="button" onClick={() => { setStep('forgot'); setError(''); setInfo('') }}
+                <button type="button" onClick={() => { setStep('reset'); setError(''); setInfo('') }}
                   style={{ background:'none', border:'none', color:'#7B2CBF', fontSize:'0.8rem', fontWeight:600, cursor:'pointer', padding:0 }}>
-                  Forgot password?
+                  Change password?
                 </button>
               </div>
 
@@ -308,8 +342,8 @@ export default function AdminLogin() {
           {step === 'reset' && (
             <form onSubmit={handleReset} style={{ width: '100%' }}>
               <div style={{ marginBottom: 28 }}>
-                <div style={{ fontSize:'1.5rem', fontWeight:800, color:'#111', marginBottom:5 }}>New Password</div>
-                <div style={{ fontSize:'0.84rem', color:'#6B7280' }}>Choose a strong new password.</div>
+                <div style={{ fontSize:'1.5rem', fontWeight:800, color:'#111', marginBottom:5 }}>Change Password</div>
+                <div style={{ fontSize:'0.84rem', color:'#6B7280' }}>Pick a department — its password is changed independently.</div>
               </div>
 
               {info && (
@@ -323,6 +357,14 @@ export default function AdminLogin() {
                 </div>
               )}
 
+              <div style={{ marginBottom:14 }}>
+                <label style={{ fontSize:'0.78rem', fontWeight:600, color:'#374151', display:'block', marginBottom:6 }}>Department</label>
+                <Dropdown
+                  value={role}
+                  options={['Marketing', 'R&D']}
+                  onChange={r => { setRole(r); setError('') }}
+                />
+              </div>
               <div style={{ marginBottom:14 }}>
                 <label style={{ fontSize:'0.78rem', fontWeight:600, color:'#374151', display:'block', marginBottom:6 }}>New Password</label>
                 <input style={inputStyle} type="password" placeholder="Min. 6 characters" value={newPass} required
@@ -340,8 +382,12 @@ export default function AdminLogin() {
                 />
               </div>
 
-              <button type="submit" style={btnStyle} disabled={loading}>
+              <button type="submit" style={{ ...btnStyle, marginBottom:14 }} disabled={loading}>
                 {loading ? 'Updating…' : 'Update Password →'}
+              </button>
+              <button type="button" onClick={() => { setStep('login'); setError(''); setInfo(''); setNewPass(''); setConfirmPass('') }}
+                style={{ width:'100%', padding:'12px', borderRadius:10, border:'1.5px solid #E5E7EB', background:'transparent', color:'#374151', fontWeight:600, fontSize:'0.9rem', cursor:'pointer' }}>
+                ← Back to Sign In
               </button>
             </form>
           )}

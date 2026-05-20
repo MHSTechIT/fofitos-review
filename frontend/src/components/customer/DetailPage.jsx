@@ -41,36 +41,39 @@ function ActivityRings({ pro, fat, carb, fibre, cal, revealed = false }) {
   const SW   = 22                // thick stroke to match screenshot
   const circ = 2 * Math.PI * R
 
-  // Use carb+protein+fat as donut total (3 segments, matches screenshot)
-  const total = Math.max((carb||0) + (pro||0) + (fat||0), 1)
+  // Donut total includes all four macros so Fibre gets its own segment
+  const total = Math.max((carb||0) + (pro||0) + (fat||0) + (fibre||0), 1)
 
   const segments = [
-    { label:'Carbs',   val: carb||0, color:'#4A90D9' },
-    { label:'Protein', val: pro ||0, color:'#2CB67D' },
-    { label:'Fat',     val: fat ||0, color:'#E05252' },
+    { label:'Carbs',   val: carb ||0, color:'#4A90D9' },
+    { label:'Protein', val: pro  ||0, color:'#2CB67D' },
+    { label:'Fat',     val: fat  ||0, color:'#E05252' },
+    { label:'Fibre',   val: fibre||0, color:'#C8BEA8' },
   ]
 
-  // Gap between segments in degrees (creates the white notch)
+  // Gap between segments in degrees (creates the white notch).
+  // Only count gaps for segments that actually have a value, so a zero
+  // macro doesn't eat arc length.
   const GAP_DEG = 6
   const GAP_ARC = (GAP_DEG / 360) * circ
-  const usable  = circ - segments.length * GAP_ARC
+  const visibleCount = segments.filter(s => s.val > 0).length || 1
+  const usable  = circ - visibleCount * GAP_ARC
 
   // Build arc start angles
   let angle = -90   // 12 o'clock
   const arcs = segments.map(seg => {
     const arcLen   = (seg.val / total) * usable
     const rotAngle = angle
-    angle += (arcLen / circ) * 360 + GAP_DEG
+    angle += (arcLen / circ) * 360 + (seg.val > 0 ? GAP_DEG : 0)
     return { ...seg, arcLen, rotAngle }
   })
 
-  // Legend includes fibre using the full macro total
-  const fullTotal = Math.max((carb||0)+(pro||0)+(fat||0)+(fibre||0), 1)
+  // Legend uses the same total as the donut
   const legend = [
-    { l:'Carbs',   pct: Math.round((carb  ||0)/fullTotal*100), c:'#4A90D9' },
-    { l:'Protein', pct: Math.round((pro   ||0)/fullTotal*100), c:'#2CB67D' },
-    { l:'Fat',     pct: Math.round((fat   ||0)/fullTotal*100), c:'#E05252' },
-    { l:'Fibre',   pct: Math.round((fibre ||0)/fullTotal*100), c:'#C8BEA8' },
+    { l:'Carbs',   pct: Math.round((carb  ||0)/total*100), c:'#4A90D9' },
+    { l:'Protein', pct: Math.round((pro   ||0)/total*100), c:'#2CB67D' },
+    { l:'Fat',     pct: Math.round((fat   ||0)/total*100), c:'#E05252' },
+    { l:'Fibre',   pct: Math.round((fibre ||0)/total*100), c:'#C8BEA8' },
   ]
 
   return (

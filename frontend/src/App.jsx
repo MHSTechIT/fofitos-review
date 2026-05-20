@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import HomePage from './components/customer/HomePage'
 import CategoryPage from './components/customer/CategoryPage'
 import DetailPage from './components/customer/DetailPage'
@@ -12,8 +12,11 @@ import LinksPage from './components/admin/LinksPage'
 import QRPage from './components/admin/QRPage'
 import GoRedirect from './components/GoRedirect'
 
-/* ── Auth guard removed (self-hosted build runs without auth) ── */
+/* ── Auth guard: /admin requires a successful login ── */
 function AuthGuard({ children }) {
+  if (localStorage.getItem('admin_authed') !== '1') {
+    return <Navigate to="/admin/login" replace />
+  }
   return children
 }
 

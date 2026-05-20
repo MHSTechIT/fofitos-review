@@ -107,11 +107,21 @@ function ChangePasswordModal({ onClose }) {
     if (newPass !== confirmPass) { setError('Passwords do not match.'); return }
     if (newPass.length < 6)     { setError('Password must be at least 6 characters.'); return }
     setError(''); setLoading(true)
-    const { error: err } = await sb.auth.updateUser({ password: newPass })
-    setLoading(false)
-    if (err) { setError('Failed to update password. Try again.'); return }
-    setSuccess(true)
-    setTimeout(onClose, 1500)
+    try {
+      const res = await fetch('/api/admin/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ department: localStorage.getItem('admin_role') || 'Marketing', password: newPass }),
+      })
+      const json = await res.json()
+      setLoading(false)
+      if (!json.ok) { setError(json.error || 'Failed to update password. Try again.'); return }
+      setSuccess(true)
+      setTimeout(onClose, 1500)
+    } catch {
+      setLoading(false)
+      setError('Could not reach the server. Try again.')
+    }
   }
 
   const inputStyle = {
@@ -127,7 +137,9 @@ function ChangePasswordModal({ onClose }) {
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:24 }}>
           <div>
             <div style={{ fontSize:'1.1rem', fontWeight:800, color:'#111' }}>Change Password</div>
-            <div style={{ fontSize:'0.78rem', color:'#6B7280', marginTop:2 }}>No email verification required</div>
+            <div style={{ fontSize:'0.78rem', color:'#6B7280', marginTop:2 }}>
+              For the <strong style={{ color:'#7B2CBF' }}>{localStorage.getItem('admin_role') || 'Marketing'}</strong> account only
+            </div>
           </div>
           <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'#9CA3AF', fontSize:'1.1rem' }}>✕</button>
         </div>
@@ -283,9 +295,10 @@ export default function AdminLayout() {
     setNotifOpen(false)
   }
 
-  async function handleLogout() {
+  function handleLogout() {
     setDropdownOpen(false)
-    await sb.auth.signOut()
+    localStorage.removeItem('admin_authed')
+    localStorage.removeItem('admin_role')
     navigate('/admin/login')
   }
 
@@ -370,8 +383,12 @@ export default function AdminLayout() {
                 animation:'fadeDropdown 0.15s ease',
               }}>
                 <div style={{ padding:'12px 16px', borderBottom:'1px solid #F3F4F6' }}>
-                  <div style={{ fontSize:'0.78rem', fontWeight:700, color:'#111' }}>Fofitos Marketing</div>
-                  <div style={{ fontSize:'0.7rem', color:'#9CA3AF', marginTop:1 }}>Administrator</div>
+                  <div style={{ fontSize:'0.78rem', fontWeight:700, color:'#111' }}>
+                    Fofitos {localStorage.getItem('admin_role') || 'Marketing'}
+                  </div>
+                  <div style={{ fontSize:'0.7rem', color:'#9CA3AF', marginTop:1 }}>
+                    {localStorage.getItem('admin_role') || 'Marketing'} · Administrator
+                  </div>
                 </div>
 
                 <button

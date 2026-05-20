@@ -43,6 +43,10 @@ export default function LinksPage() {
           const videos = Array.isArray(data.media_videos)
             ? data.media_videos.map(v => typeof v === 'string' ? { url: v, autoplay: true } : { url: v?.url || '', autoplay: v?.autoplay !== false })
             : []
+          // Normalise media_images: older rows stored bare strings; new shape is {url, link}
+          const imgs = Array.isArray(data.media_images)
+            ? data.media_images.map(v => typeof v === 'string' ? { url: v, link: '' } : { url: v?.url || '', link: v?.link || '' })
+            : []
           setForm({
             zomato_url:     data.zomato_url     || '',
             swiggy_url:     data.swiggy_url     || '',
@@ -53,7 +57,7 @@ export default function LinksPage() {
             footer_phone1:  data.footer_phone1  || '',
             footer_phone2:  data.footer_phone2  || '',
             footer_email:   data.footer_email   || '',
-            media_images:   Array.isArray(data.media_images) ? data.media_images : [],
+            media_images:   imgs,
             media_videos:   videos,
           })
         }
@@ -105,7 +109,10 @@ export default function LinksPage() {
 
   function addImage(url) {
     if (!url) return
-    setForm(f => ({ ...f, media_images: [...(f.media_images || []), url] }))
+    setForm(f => ({ ...f, media_images: [...(f.media_images || []), { url, link: '' }] }))
+  }
+  function updateImageLink(i, link) {
+    setForm(f => ({ ...f, media_images: f.media_images.map((im, idx) => idx === i ? { ...im, link } : im) }))
   }
   function removeImage(i) {
     setForm(f => ({ ...f, media_images: f.media_images.filter((_, idx) => idx !== i) }))
@@ -163,18 +170,32 @@ export default function LinksPage() {
                 {/* ── Media (images + video links) ── */}
                 <Section title="Media — Images & Videos">
                   <p style={{ fontSize:'0.76rem', color:'var(--muted)', marginBottom:18 }}>
-                    Add images and video URLs here. Functionality TBD.
+                    Images and videos shown in the home-page carousel. An image with a link
+                    redirects when tapped; leave the link blank to show it as a plain image.
                   </p>
 
                   {/* Images */}
                   <div style={{ marginBottom:22 }}>
                     <div className="f-label" style={{ marginBottom:8 }}>Images</div>
                     {(form.media_images || []).length > 0 && (
-                      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(96px,1fr))', gap:8, marginBottom:10 }}>
-                        {form.media_images.map((url, i) => (
-                          <div key={i} style={{ position:'relative', width:'100%', aspectRatio:'1', borderRadius:10, overflow:'hidden', border:'1px solid var(--border)', background:'#FAF9FE' }}>
-                            <img src={url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
-                            <button onClick={() => removeImage(i)} style={{ position:'absolute', top:4, right:4, width:22, height:22, borderRadius:'50%', border:'none', background:'rgba(0,0,0,0.6)', color:'#fff', fontSize:'0.8rem', cursor:'pointer', lineHeight:1 }}>×</button>
+                      <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:10 }}>
+                        {form.media_images.map((im, i) => (
+                          <div key={i} style={{ display:'flex', gap:10, padding:10, border:'1px solid var(--border)', borderRadius:10, background:'#FAF9FE' }}>
+                            <div style={{ position:'relative', width:72, height:72, flexShrink:0, borderRadius:8, overflow:'hidden', border:'1px solid var(--border)', background:'#fff' }}>
+                              <img src={im.url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
+                            </div>
+                            <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', gap:6 }}>
+                              <label style={{ fontSize:'0.68rem', fontWeight:600, color:'var(--muted)' }}>
+                                Link when tapped (optional)
+                              </label>
+                              <input
+                                className="f-input"
+                                value={im.link || ''}
+                                onChange={e => updateImageLink(i, e.target.value)}
+                                placeholder="https://… — leave blank for image only"
+                              />
+                            </div>
+                            <button onClick={() => removeImage(i)} style={{ width:32, height:32, borderRadius:8, border:'1px solid var(--border)', background:'#fff', color:'var(--danger)', fontSize:'1rem', cursor:'pointer', flexShrink:0, alignSelf:'flex-start' }}>×</button>
                           </div>
                         ))}
                       </div>
@@ -184,9 +205,12 @@ export default function LinksPage() {
 
                   {/* Video URLs */}
                   <div>
-                    <div className="f-label" style={{ marginBottom:8, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <div className="f-label" style={{ marginBottom:2, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                       <span>Video URLs</span>
                       <button onClick={addVideo} style={{ background:'transparent', border:'1px dashed var(--purple)', color:'var(--purple)', borderRadius:8, padding:'4px 10px', fontSize:'0.72rem', fontWeight:600, cursor:'pointer' }}>+ Add Video</button>
+                    </div>
+                    <div style={{ fontSize:'0.7rem', color:'var(--muted)', marginBottom:10 }}>
+                      Carousel size: 1920 × 810 px · ratio 64:27 (desktop) / 16:9 (mobile)
                     </div>
                     {(form.media_videos || []).length === 0 && (
                       <p style={{ fontSize:'0.72rem', color:'var(--muted)', margin:0 }}>No videos added.</p>

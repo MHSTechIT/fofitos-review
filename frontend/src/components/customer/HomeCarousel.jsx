@@ -40,16 +40,41 @@ function driveEmbed(url, autoplay) {
 }
 
 /* ── Single slide that lazily renders the video iframe once "play" is tapped ── */
-function VideoSlide({ url, autoplay }) {
+function VideoSlide({ url, autoplay, isActive, onFullscreenChange }) {
   // When autoplay is true we render the iframe immediately.
   // When autoplay is false we show a thumbnail + play button; clicking play swaps to the iframe.
-  const [playing, setPlaying] = useState(autoplay)
-  const [muted,   setMuted]   = useState(true)
+  const [playing,    setPlaying]    = useState(autoplay)
+  const [muted,      setMuted]      = useState(true)
+  const [fullscreen, setFullscreen] = useState(false)
   const iframeRef = useRef(null)
   const videoRef  = useRef(null)
 
+  // Let the carousel pause auto-advance while a video is fullscreen
+  useEffect(() => { onFullscreenChange?.(fullscreen) }, [fullscreen, onFullscreenChange])
+
+  // Lock page scroll while fullscreen so the overlay covers the whole viewport
+  useEffect(() => {
+    if (!fullscreen) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [fullscreen])
+
   // If admin toggles autoplay later, react to the new prop
   useEffect(() => { setPlaying(autoplay) }, [autoplay])
+
+  // When this slide is no longer the active one, mute it so the previous
+  // slide's audio goes silent as the carousel crossfades to the next.
+  useEffect(() => {
+    if (isActive) return
+    if (iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage(
+        JSON.stringify({ event:'command', func:'mute', args:[] }), '*'
+      )
+    }
+    if (videoRef.current) videoRef.current.muted = true
+    setMuted(true)
+  }, [isActive])
 
   function toggleMute() {
     const next = !muted
@@ -63,6 +88,12 @@ function VideoSlide({ url, autoplay }) {
     }
     // For native <video>
     if (videoRef.current) videoRef.current.muted = next
+  }
+
+  // CSS-based fullscreen toggle — keeps our own overlays (click-blocker + buttons)
+  // so YouTube's native chrome never shows. Press again to return to normal size.
+  function toggleFullscreen() {
+    setFullscreen(f => !f)
   }
 
   if (!playing) {
@@ -114,11 +145,28 @@ function VideoSlide({ url, autoplay }) {
   }
 
   return (
-    <>
+    <div className={`hc-vwrap${fullscreen ? ' is-fs' : ''}`}>
       {frame}
 
       {/* Click-blocker — stops YouTube hover overlay (prev/play/next) appearing */}
       <div className="hc-click-blocker"/>
+
+      {/* Fullscreen toggle (top-left) — expand to fill screen / shrink back */}
+      <button
+        onClick={toggleFullscreen}
+        aria-label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+        className="hc-fs"
+      >
+        {fullscreen ? (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path d="M4 14v6h6M20 10V4h-6M4 20l7-7M20 4l-7 7" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        )}
+      </button>
 
       {/* Mute / unmute toggle */}
       <button
@@ -138,7 +186,7 @@ function VideoSlide({ url, autoplay }) {
           </svg>
         )}
       </button>
-    </>
+    </div>
   )
 }
 
@@ -150,6 +198,12 @@ function VideoSlide({ url, autoplay }) {
  * - autoplay=false: thumbnail + play button; clicking either plays the video
  */
 export default function HomeCarousel({ images = [], videos = [] }) {
+  // Normalise images to {url, link} shape (older rows stored bare strings)
+  const normImages = images
+    .filter(Boolean)
+    .map(im => typeof im === 'string' ? { url: im, link: '' } : { url: im?.url || '', link: im?.link || '' })
+    .filter(im => im.url)
+
   // Normalise videos to {url, autoplay} shape
   const normVideos = videos
     .filter(Boolean)
@@ -157,23 +211,26 @@ export default function HomeCarousel({ images = [], videos = [] }) {
     .filter(v => v.url)
 
   const slides = [
-    ...images.filter(Boolean).map(url => ({ kind: 'image', url })),
+    ...normImages.map(im => ({ kind: 'image', url: im.url, link: im.link })),
     ...normVideos.map(v => ({ kind: 'video', url: v.url, autoplay: v.autoplay })),
   ]
 
   const [active, setActive] = useState(0)
   const [paused, setPaused] = useState(false)
+  const [fsActive, setFsActive] = useState(false)   // a video is in fullscreen
   const timerRef = useRef(null)
 
   useEffect(() => {
-    if (slides.length < 2 || paused) return
+    if (slides.length < 2 || paused || fsActive) return
     timerRef.current = setTimeout(() => {
       setActive(i => (i + 1) % slides.length)
     }, INTERVAL_MS)
     return () => clearTimeout(timerRef.current)
-  }, [active, slides.length, paused])
+  }, [active, slides.length, paused, fsActive])
 
   if (slides.length === 0) return null
+
+  const go = (delta) => setActive(i => (i + delta + slides.length) % slides.length)
 
   return (
     <div
@@ -188,23 +245,27 @@ export default function HomeCarousel({ images = [], videos = [] }) {
           style={{ transition: `opacity ${TRANSITION}ms ease` }}
         >
           {s.kind === 'image'
-            ? <img src={s.url} alt="" className="hc-img"/>
-            : <VideoSlide url={s.url} autoplay={s.autoplay}/>}
+            ? (s.link
+                ? <a href={s.link} className="hc-imglink"><img src={s.url} alt="" className="hc-img"/></a>
+                : <img src={s.url} alt="" className="hc-img"/>)
+            : <VideoSlide url={s.url} autoplay={s.autoplay} isActive={i === active} onFullscreenChange={setFsActive}/>}
         </div>
       ))}
 
-      {/* Dots indicator */}
+      {/* Manual swipe arrows */}
       {slides.length > 1 && (
-        <div className="hc-dots">
-          {slides.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setActive(i)}
-              aria-label={`Slide ${i + 1}`}
-              className={`hc-dot ${i === active ? 'is-active' : ''}`}
-            />
-          ))}
-        </div>
+        <>
+          <button className="hc-arrow hc-arrow-left" aria-label="Previous slide" onClick={() => go(-1)}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <path d="M15 18l-6-6 6-6" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+          <button className="hc-arrow hc-arrow-right" aria-label="Next slide" onClick={() => go(1)}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <path d="M9 18l6-6-6-6" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        </>
       )}
     </div>
   )

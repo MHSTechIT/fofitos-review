@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { sb } from '../../lib/supabase'
+import Dropdown from './Dropdown'
 
 export default function ReviewsPage() {
   const [reviews, setReviews] = useState([])
@@ -45,20 +46,25 @@ export default function ReviewsPage() {
     <>
       <div className="admin-content">
         <div className="filter-bar">
-          <select className="filter-select" value={filterProd} onChange={e => setFilterProd(e.target.value)}>
-            <option value="">All Products</option>
-            {products.map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-          <select className="filter-select" value={filterStar} onChange={e => setFilterStar(e.target.value)}>
-            <option value="">All Ratings</option>
-            <option value="5">★★★★★ 5 Star</option>
-            <option value="4">★★★★☆ 4 Star</option>
-            <option value="3">★★★☆☆ 3 Star</option>
-            <option value="2">★★☆☆☆ 2 Star</option>
-            <option value="1">★☆☆☆☆ 1 Star</option>
-          </select>
+          <Dropdown
+            value={filterProd}
+            options={[{ value: '', label: 'All Products' }, ...products.map(p => ({ value: p.id, label: p.name }))]}
+            onChange={setFilterProd}
+            style={{ width: 240, flexShrink: 0 }}
+          />
+          <Dropdown
+            value={filterStar}
+            options={[
+              { value: '',  label: 'All Ratings' },
+              { value: '5', label: '★★★★★ 5 Star' },
+              { value: '4', label: '★★★★☆ 4 Star' },
+              { value: '3', label: '★★★☆☆ 3 Star' },
+              { value: '2', label: '★★☆☆☆ 2 Star' },
+              { value: '1', label: '★☆☆☆☆ 1 Star' },
+            ]}
+            onChange={setFilterStar}
+            style={{ width: 190, flexShrink: 0 }}
+          />
           <span style={{ color: 'var(--muted)', fontSize: '0.84rem' }}>{filtered.length} review{filtered.length !== 1 ? 's' : ''}</span>
         </div>
 

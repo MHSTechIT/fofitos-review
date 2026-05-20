@@ -33,4 +33,4 @@ dist-ssr
 db_migration/
 
 # Runtime-uploaded media (user content, not source)
-server/uploads/
+backend/uploads/

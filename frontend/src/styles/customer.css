@@ -626,6 +626,14 @@ body {
 .hc-img   { object-fit: cover; }
 .hc-video { object-fit: cover; }
 
+/* Clickable image slide — fills the slide, image inside it */
+.hc-imglink {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
 /* Desktop: the carousel card is 64/27 (wider than 16:9), so a YouTube iframe
    would letterbox the video. Scale the iframe up so its 16:9 content fully
    covers the card — the card's overflow:hidden clips the excess. */
@@ -673,6 +681,26 @@ body {
   background: rgba(124,58,237,0.95);
 }
 
+/* Video slide wrapper — normally fills the slide; goes full-viewport when .is-fs */
+.hc-vwrap {
+  position: absolute;
+  inset: 0;
+}
+.hc-vwrap.is-fs {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #000;
+}
+/* In fullscreen, cancel the desktop cover-transform so the 16:9 video
+   fills the viewport normally instead of being over-scaled. */
+.hc-vwrap.is-fs iframe.hc-video {
+  position: static;
+  transform: none;
+  width: 100%;
+  height: 100%;
+}
+
 /* Transparent layer over the whole video that catches hover/click so
    YouTube's center play/prev/next buttons never appear. */
 .hc-click-blocker {
@@ -702,6 +730,49 @@ body {
   transform: scale(1.08);
 }
 
+/* Fullscreen button — top-left, mirrors the mute button styling */
+.hc-fs {
+  position: absolute;
+  top: 10px; left: 12px;
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+.hc-fs:hover {
+  background: rgba(0,0,0,0.75);
+  transform: scale(1.08);
+}
+
+/* Manual prev/next arrows — transparent, vertically centred on the card */
+.hc-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 42px; height: 42px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0,0,0,0.22);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  z-index: 3;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+.hc-arrow:hover {
+  background: rgba(0,0,0,0.5);
+  transform: translateY(-50%) scale(1.08);
+}
+.hc-arrow-left  { left: 12px; }
+.hc-arrow-right { right: 12px; }
+
 /* Dot indicators */
 .hc-dots {
   position: absolute;
@@ -724,3 +795,72 @@ body {
   background: #fff;
   transform: scale(1.25);
 }
+
+/* ══════════════════════════════════════════════════════════
+   Custom dropdown — replaces native <select> across the app
+   ══════════════════════════════════════════════════════════ */
+.dd { position: relative; width: 100%; }
+
+.dd-trigger {
+  width: 100%;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 11px 15px;
+  border: 1.5px solid #E5E7EB;
+  border-radius: 10px;
+  background: #F9FAFB;
+  font-size: 0.9rem;
+  font-family: inherit;
+  color: #1A1A2E;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.dd-trigger:hover { border-color: #C9B8E8; }
+.dd-trigger.is-open {
+  border-color: #7B2CBF;
+  box-shadow: 0 0 0 3px rgba(123,44,191,0.12);
+}
+.dd-val         { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dd-placeholder { color: #9CA3AF; }
+.dd-chevron     { color: #7B2CBF; flex-shrink: 0; transition: transform 0.2s ease; }
+.dd-trigger.is-open .dd-chevron { transform: rotate(180deg); }
+
+.dd-panel {
+  position: absolute;
+  top: calc(100% + 6px); left: 0; right: 0;
+  background: #fff;
+  border: 1px solid #EAE5F5;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(75,0,150,0.16);
+  padding: 6px;
+  z-index: 1000;
+  max-height: 260px;
+  overflow-y: auto;
+  animation: ddIn 0.14s ease;
+}
+@keyframes ddIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.dd-option {
+  width: 100%;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 9px 12px;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  font-size: 0.86rem;
+  font-family: inherit;
+  color: #374151;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.13s ease, color 0.13s ease;
+}
+.dd-option:hover { background: #F5F0FF; color: #5B21B6; }
+.dd-option.is-selected {
+  background: #7B2CBF;
+  color: #fff;
+  font-weight: 600;
+}
+.dd-option.is-selected:hover { background: #6D28D9; color: #fff; }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { sb } from '../../lib/supabase'
 import ImageUpload from './ImageUpload'
+import Dropdown from './Dropdown'
 
 const MACRO_COLORS = ['#2CB67D', '#E09A2C', '#4A90D9', '#C8BEA8', '#E05252', '#7B2CBF']
 
@@ -285,6 +286,56 @@ function IngrEditor({ rows, onChange }) {
   )
 }
 
+/* ── Live macro preview — mirrors the customer "Calorie Breakdown" ── */
+function MacroPreview({ cal, pro, carb, fat, fibre }) {
+  const c    = parseInt(carb)  || 0
+  const p    = parseInt(pro)   || 0
+  const f    = parseInt(fat)   || 0
+  const fb   = parseInt(fibre) || 0
+  const kcal = parseInt(cal)   || 0
+  const total = Math.max(c + p + f + fb, 1)
+
+  const rows = [
+    { label: 'Carbs',   val: c,  color: '#4A90D9' },
+    { label: 'Protein', val: p,  color: '#2CB67D' },
+    { label: 'Fat',     val: f,  color: '#E05252' },
+    { label: 'Fibre',   val: fb, color: '#C8BEA8' },
+  ]
+
+  return (
+    <div style={{
+      marginTop: 14, background: '#FAF9FE', border: '1px solid var(--border)',
+      borderRadius: 12, padding: '16px 18px',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14 }}>
+        <span style={{ fontSize: '0.64rem', fontWeight: 800, letterSpacing: '1.5px', color: 'var(--purple)', textTransform: 'uppercase' }}>
+          Live Preview
+        </span>
+        <span>
+          <strong style={{ fontSize: '1.45rem', color: 'var(--text)' }}>{kcal}</strong>
+          <span style={{ fontSize: '0.72rem', color: 'var(--muted)', marginLeft: 4 }}>kcal</span>
+        </span>
+      </div>
+      {rows.map(r => {
+        const pct = Math.round((r.val / total) * 100)
+        return (
+          <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 9 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 7, width: 78, flexShrink: 0 }}>
+              <span style={{ width: 9, height: 9, borderRadius: '50%', background: r.color, display: 'inline-block', flexShrink: 0 }}/>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text)' }}>{r.label}</span>
+            </span>
+            <div style={{ flex: 1, height: 7, background: '#ECEAF3', borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{ width: `${pct}%`, height: '100%', background: r.color, borderRadius: 4, transition: 'width 0.2s ease' }}/>
+            </div>
+            <span style={{ fontSize: '0.74rem', color: 'var(--muted)', width: 36, textAlign: 'right', flexShrink: 0 }}>{r.val} g</span>
+            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text)', width: 40, textAlign: 'right', flexShrink: 0 }}>{pct}%</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function ProductsPage() {
   const [products, setProducts] = useState([])
   const [cats, setCats] = useState([])
@@ -338,6 +389,7 @@ export default function ProductsPage() {
   async function handleSave() {
     if (!form.cat || !form.name) return
     setSaving(true)
+    const doneBy = localStorage.getItem('admin_role') || '—'
     const payload = {
       cat: form.cat, name: form.name, img: form.img, tagline: form.tagline,
       price: form.price, rating: parseFloat(form.rating) || 4.0,
@@ -347,10 +399,14 @@ export default function ProductsPage() {
       carb: parseInt(form.carb) || 0, fat: parseInt(form.fat) || 0,
       fibre: parseInt(form.fibre) || 0,
       tags: form.tags, nutrition: form.nutrition, ingr: form.ingr,
+      done_by: doneBy,
     }
     if (editing) {
+      // Stamp the edit time; created_at is left untouched
+      payload.updated_at = new Date().toISOString()
       await sb.from('products').update(payload).eq('id', form.id)
     } else {
+      // New product — created_at & updated_at use the DB default (NOW())
       await sb.from('products').insert(payload)
     }
     setSaving(false)
@@ -379,10 +435,12 @@ export default function ProductsPage() {
       <div className="admin-content">
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
           <input className="filter-input" style={{ margin: 0 }} placeholder="Search products…" value={search} onChange={e => setSearch(e.target.value)} />
-          <select className="filter-select" style={{ margin: 0, flexShrink: 0 }} value={filterCat} onChange={e => setFilterCat(e.target.value)}>
-            <option value="">All Categories</option>
-            {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <Dropdown
+            value={filterCat}
+            options={[{ value: '', label: 'All Categories' }, ...cats.map(c => ({ value: c.id, label: c.name }))]}
+            onChange={setFilterCat}
+            style={{ width: 210, flexShrink: 0 }}
+          />
           <button className="btn btn-primary" style={{ flexShrink: 0 }} onClick={openAdd}>+ Add Product</button>
         </div>
 
@@ -467,10 +525,12 @@ export default function ProductsPage() {
                 </div>
                 <div className="form-group">
                   <label className="f-label">Category *</label>
-                  <select className="f-select" value={form.cat} onChange={e => set('cat', e.target.value)}>
-                    <option value="">Select category</option>
-                    {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  <Dropdown
+                    value={form.cat}
+                    options={[{ value: '', label: 'Select category' }, ...cats.map(c => ({ value: c.id, label: c.name }))]}
+                    onChange={v => set('cat', v)}
+                    placeholder="Select category"
+                  />
                 </div>
                 <div className="form-group full">
                   <label className="f-label">Tagline</label>
@@ -491,6 +551,8 @@ export default function ProductsPage() {
                   </div>
                 ))}
               </div>
+              {/* Live preview — updates as the macro fields are typed */}
+              <MacroPreview cal={form.cal} pro={form.pro} carb={form.carb} fat={form.fat} fibre={form.fibre} />
 
               <div className="form-section">Tags</div>
               <TagInput tags={form.tags} onChange={v => set('tags', v)} />

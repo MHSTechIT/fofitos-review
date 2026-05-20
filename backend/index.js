@@ -10,7 +10,10 @@ import { query, pool } from './db.js'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname  = path.dirname(__filename)
 
-const UPLOADS_DIR = path.resolve(process.env.UPLOADS_DIR || './server/uploads')
+// Uploads live alongside this file (backend/uploads) regardless of cwd
+const UPLOADS_DIR = process.env.UPLOADS_DIR
+  ? path.resolve(__dirname, process.env.UPLOADS_DIR)
+  : path.join(__dirname, 'uploads')
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || ''
 const PORT = parseInt(process.env.API_PORT || '8080', 10)
 
@@ -20,7 +23,7 @@ const ALLOWED_TABLES = new Set(['categories', 'products', 'reviews', 'qr_links',
 // Whitelist of columns per table — used to filter unknown keys in incoming JSON
 const TABLE_COLUMNS = {
   categories: ['id','name','description','img','sort_order','video_url','group_name'],
-  products:   ['id','cat','name','img','tagline','price','rating','reviews','tags','cal','pro','carb','fat','fibre','nutrition','ingr','revs','bg_color','arch_color','sort_order','is_veg'],
+  products:   ['id','cat','name','img','tagline','price','rating','reviews','tags','cal','pro','carb','fat','fibre','nutrition','ingr','revs','bg_color','arch_color','sort_order','is_veg','created_at','updated_at','done_by'],
   reviews:    ['id','product_id','name','rating','text','verified','created_at','phone','visible'],
   qr_links:   ['id','url','label'],
   links:      ['id','zomato_url','swiggy_url','review_url','footer_company','footer_fssai','footer_gst','footer_phone1','footer_phone2','footer_email','media_images','media_videos'],
@@ -139,6 +142,48 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' })
   const url = `${PUBLIC_BASE_URL}/uploads/${req.file.filename}`
   res.json({ data: { url, filename: req.file.filename, size: req.file.size } })
+})
+
+// --- Admin auth (per-department passwords in the admin_auth table) ---
+// Each department (Marketing, R&D) has its own row keyed by id = department.
+// Registered before /api/:table so "admin" is not treated as a table name.
+
+const VALID_DEPTS = new Set(['Marketing', 'R&D'])
+
+// Verify a login password for one department. The password is never sent back.
+app.post('/api/admin/login', async (req, res) => {
+  const { department, password } = req.body || {}
+  if (!VALID_DEPTS.has(department)) {
+    return res.json({ ok: false, error: 'Unknown department' })
+  }
+  try {
+    const r = await query('SELECT password FROM public.admin_auth WHERE id = $1 LIMIT 1', [department])
+    const stored = r.rows[0]?.password
+    res.json({ ok: stored != null && password === stored })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message })
+  }
+})
+
+// Change one department's password — does not affect the other department.
+app.post('/api/admin/password', async (req, res) => {
+  const { department, password } = req.body || {}
+  if (!VALID_DEPTS.has(department)) {
+    return res.status(400).json({ ok: false, error: 'Unknown department' })
+  }
+  if (!password || String(password).length < 6) {
+    return res.status(400).json({ ok: false, error: 'Password must be at least 6 characters.' })
+  }
+  try {
+    await query(
+      `INSERT INTO public.admin_auth (id, password) VALUES ($1, $2)
+       ON CONFLICT (id) DO UPDATE SET password = EXCLUDED.password`,
+      [department, password]
+    )
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message })
+  }
 })
 
 // --- GET /api/:table (list) ---
