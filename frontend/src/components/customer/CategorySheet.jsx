@@ -40,9 +40,9 @@ export default function CategorySheet({ cat, onClose }) {
 
   useEffect(() => {
     sb.from('products')
-      .select('id, name, img, price, bg_color, arch_color')
+      .select('id, name, img, price, bg_color, arch_color, active')
       .eq('cat', cat.id)
-      .then(({ data }) => { setProducts(data || []); setLoading(false) })
+      .then(({ data }) => { setProducts((data || []).filter(p => p.active !== false)); setLoading(false) })
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = ''; clearTimeout(timer.current) }
   }, [cat.id])

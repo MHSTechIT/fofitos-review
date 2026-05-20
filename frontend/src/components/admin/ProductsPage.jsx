@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { sb } from '../../lib/supabase'
 import ImageUpload from './ImageUpload'
 import Dropdown from './Dropdown'
+import StatusToggle from './StatusToggle'
 
 const MACRO_COLORS = ['#2CB67D', '#E09A2C', '#4A90D9', '#C8BEA8', '#E05252', '#7B2CBF']
 
@@ -351,12 +352,19 @@ export default function ProductsPage() {
 
   async function load() {
     const [{ data: prods }, { data: catData }] = await Promise.all([
-      sb.from('products').select('id, name, img, cat, price, rating, tagline'),
+      sb.from('products').select('id, name, img, cat, price, rating, tagline, active'),
       sb.from('categories').select('id, name').order('sort_order'),
     ])
     setProducts(prods || [])
     setCats(catData || [])
     setLoading(false)
+  }
+
+  // Flip a product's ON/OFF state — OFF hides it from customers
+  async function toggleActive(p) {
+    const next = p.active === false   // currently off → turn on
+    await sb.from('products').update({ active: next }).eq('id', p.id)
+    setProducts(prev => prev.map(x => x.id === p.id ? { ...x, active: next } : x))
   }
 
   useEffect(() => { load() }, [])
@@ -452,15 +460,16 @@ export default function ProductsPage() {
                   <tr>
                     <th>Item</th>
                     <th>Category</th>
+                    <th>Status</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.length === 0 && (
-                    <tr><td colSpan={3} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>No products found.</td></tr>
+                    <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--muted)', padding: 32 }}>No products found.</td></tr>
                   )}
                   {filtered.map(p => (
-                    <tr key={p.id}>
+                    <tr key={p.id} style={{ opacity: p.active === false ? 0.55 : 1 }}>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <img className="img-thumb" src={p.img} alt={p.name} />
@@ -471,6 +480,7 @@ export default function ProductsPage() {
                         </div>
                       </td>
                       <td><span className="badge badge-cat">{p.cat}</span></td>
+                      <td><StatusToggle on={p.active !== false} onClick={() => toggleActive(p)} /></td>
                       <td>
                         <div className="action-btns">
                           <button className="btn btn-ghost btn-sm" onClick={() => openEdit(p.id)}>Edit</button>

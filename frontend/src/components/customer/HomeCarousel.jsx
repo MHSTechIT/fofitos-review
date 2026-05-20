@@ -43,9 +43,11 @@ function driveEmbed(url, autoplay) {
 function VideoSlide({ url, autoplay, isActive, onFullscreenChange }) {
   // When autoplay is true we render the iframe immediately.
   // When autoplay is false we show a thumbnail + play button; clicking play swaps to the iframe.
-  const [playing,    setPlaying]    = useState(autoplay)
-  const [muted,      setMuted]      = useState(true)
-  const [fullscreen, setFullscreen] = useState(false)
+  const [playing,     setPlaying]     = useState(autoplay)
+  const [muted,       setMuted]       = useState(true)
+  const [fullscreen,  setFullscreen]  = useState(false)
+  const [videoPaused, setVideoPaused] = useState(false)   // custom play/pause state
+  const [cover,       setCover]       = useState(true)    // masks YouTube's own chrome
   const iframeRef = useRef(null)
   const videoRef  = useRef(null)
 
@@ -62,6 +64,15 @@ function VideoSlide({ url, autoplay, isActive, onFullscreenChange }) {
 
   // If admin toggles autoplay later, react to the new prop
   useEffect(() => { setPlaying(autoplay) }, [autoplay])
+
+  // When the iframe (re)starts, YouTube flashes its own title-card / channel /
+  // skip-buttons chrome for a few seconds. Keep an opaque cover over the player
+  // until that auto-hides, so only a clean video is ever shown.
+  useEffect(() => {
+    if (!playing) { setCover(true); return }
+    const t = setTimeout(() => setCover(false), 3800)
+    return () => clearTimeout(t)
+  }, [playing])
 
   // When this slide is no longer the active one, mute it so the previous
   // slide's audio goes silent as the carousel crossfades to the next.
@@ -94,6 +105,23 @@ function VideoSlide({ url, autoplay, isActive, onFullscreenChange }) {
   // so YouTube's native chrome never shows. Press again to return to normal size.
   function toggleFullscreen() {
     setFullscreen(f => !f)
+  }
+
+  // Custom play / pause. While paused, YouTube would show its own paused
+  // overlay (title + centre play button) — so we drop the cover back over it.
+  function togglePlay() {
+    const next = !videoPaused
+    setVideoPaused(next)
+    setCover(next)
+    if (iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage(
+        JSON.stringify({ event:'command', func: next ? 'pauseVideo' : 'playVideo', args: [] }), '*'
+      )
+    }
+    if (videoRef.current) {
+      if (next) videoRef.current.pause()
+      else      videoRef.current.play()
+    }
   }
 
   if (!playing) {
@@ -151,6 +179,13 @@ function VideoSlide({ url, autoplay, isActive, onFullscreenChange }) {
       {/* Click-blocker — stops YouTube hover overlay (prev/play/next) appearing */}
       <div className="hc-click-blocker"/>
 
+      {/* Opaque cover — masks YouTube's title-card / channel / paused chrome */}
+      <div className={`hc-cover${cover ? '' : ' is-hidden'}`} aria-hidden="true">
+        {isYouTube(url) && youtubeThumb(url) && (
+          <img src={youtubeThumb(url)} alt="" className="hc-img"/>
+        )}
+      </div>
+
       {/* Fullscreen toggle (top-left) — expand to fill screen / shrink back */}
       <button
         onClick={toggleFullscreen}
@@ -183,6 +218,23 @@ function VideoSlide({ url, autoplay, isActive, onFullscreenChange }) {
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
             <path d="M11 5L6 9H3v6h3l5 4V5z" stroke="#fff" strokeWidth="2" strokeLinejoin="round"/>
             <path d="M16 8a5 5 0 010 8M19 5a9 9 0 010 14" stroke="#fff" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+        )}
+      </button>
+
+      {/* Play / pause toggle (bottom-right) */}
+      <button
+        onClick={togglePlay}
+        aria-label={videoPaused ? 'Play' : 'Pause'}
+        className="hc-playpause"
+      >
+        {videoPaused ? (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="#fff">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="#fff">
+            <path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.4z"/>
           </svg>
         )}
       </button>
@@ -219,6 +271,8 @@ export default function HomeCarousel({ images = [], videos = [] }) {
   const [paused, setPaused] = useState(false)
   const [fsActive, setFsActive] = useState(false)   // a video is in fullscreen
   const timerRef = useRef(null)
+  const touchX   = useRef(0)   // swipe start X
+  const touchY   = useRef(0)   // swipe start Y
 
   useEffect(() => {
     if (slides.length < 2 || paused || fsActive) return
@@ -232,11 +286,31 @@ export default function HomeCarousel({ images = [], videos = [] }) {
 
   const go = (delta) => setActive(i => (i + delta + slides.length) % slides.length)
 
+  /* ── Touch swipe (mobile): swipe left → next, swipe right → previous ── */
+  function onTouchStart(e) {
+    const t = e.touches[0]
+    if (!t) return
+    touchX.current = t.clientX
+    touchY.current = t.clientY
+  }
+  function onTouchEnd(e) {
+    const t = e.changedTouches[0]
+    if (!t) return
+    const dx = t.clientX - touchX.current
+    const dy = t.clientY - touchY.current
+    const THRESHOLD = 45   // min px for a deliberate horizontal swipe
+    // Ignore taps and vertical scrolls — act only on a dominant horizontal move
+    if (Math.abs(dx) < THRESHOLD || Math.abs(dx) < Math.abs(dy)) return
+    go(dx < 0 ? 1 : -1)
+  }
+
   return (
     <div
       className="home-carousel"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
     >
       {slides.map((s, i) => (
         <div

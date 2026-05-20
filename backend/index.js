@@ -22,8 +22,8 @@ const ALLOWED_TABLES = new Set(['categories', 'products', 'reviews', 'qr_links',
 
 // Whitelist of columns per table — used to filter unknown keys in incoming JSON
 const TABLE_COLUMNS = {
-  categories: ['id','name','description','img','sort_order','video_url','group_name'],
-  products:   ['id','cat','name','img','tagline','price','rating','reviews','tags','cal','pro','carb','fat','fibre','nutrition','ingr','revs','bg_color','arch_color','sort_order','is_veg','created_at','updated_at','done_by'],
+  categories: ['id','name','description','img','sort_order','video_url','group_name','active'],
+  products:   ['id','cat','name','img','tagline','price','rating','reviews','tags','cal','pro','carb','fat','fibre','nutrition','ingr','revs','bg_color','arch_color','sort_order','is_veg','created_at','updated_at','done_by','active'],
   reviews:    ['id','product_id','name','rating','text','verified','created_at','phone','visible'],
   qr_links:   ['id','url','label'],
   links:      ['id','zomato_url','swiggy_url','review_url','footer_company','footer_fssai','footer_gst','footer_phone1','footer_phone2','footer_email','media_images','media_videos'],

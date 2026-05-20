@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { sb } from '../../lib/supabase'
 import ImageUpload from './ImageUpload'
+import StatusToggle from './StatusToggle'
 
 const EMPTY_CAT = { id: '', name: '', description: '', img: '', video_url: '', sort_order: 0, group_name: '' }
 
@@ -179,6 +180,13 @@ export default function CategoriesPage() {
     load()
   }
 
+  // Flip a category's ON/OFF state — OFF hides it (and its products) from customers
+  async function toggleActive(c) {
+    const next = c.active === false
+    await sb.from('categories').update({ active: next }).eq('id', c.id)
+    setCats(prev => prev.map(x => x.id === c.id ? { ...x, active: next } : x))
+  }
+
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   return (
@@ -199,6 +207,7 @@ export default function CategoriesPage() {
                     <th>Group</th>
                     <th>Description</th>
                     <th>Order</th>
+                    <th>Status</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -207,7 +216,7 @@ export default function CategoriesPage() {
                     <tr
                       key={c.id}
                       onClick={() => setOrderCat(c)}
-                      style={{ cursor: 'pointer' }}
+                      style={{ cursor: 'pointer', opacity: c.active === false ? 0.55 : 1 }}
                       title={`Click to reorder ${c.name} products`}
                     >
                       <td><img className="img-thumb" src={c.img} alt={c.name} /></td>
@@ -224,6 +233,9 @@ export default function CategoriesPage() {
                       </td>
                       <td style={{ color: 'var(--muted)' }}>{c.description}</td>
                       <td>{c.sort_order}</td>
+                      <td onClick={e => e.stopPropagation()}>
+                        <StatusToggle on={c.active !== false} onClick={() => toggleActive(c)} />
+                      </td>
                       <td onClick={e => e.stopPropagation()}>
                         <div className="action-btns">
                           <button className="btn btn-ghost btn-sm" onClick={() => openEdit(c)}>Edit</button>

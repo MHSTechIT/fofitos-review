@@ -677,7 +677,7 @@ export default function DetailPage() {
 
                 {/* Text content — right side */}
                 <div style={{ flex:1, minWidth:0, position:'relative', zIndex:2 }}>
-                  <div style={{ fontSize:'0.58rem', fontWeight:700, letterSpacing:'2.5px', textTransform:'uppercase', color:'rgba(196,181,253,0.7)', marginBottom:8 }}>FOFITOS KITCHEN</div>
+                  <div style={{ fontSize:'0.58rem', fontWeight:700, letterSpacing:'2.5px', textTransform:'uppercase', color:'rgba(196,181,253,0.7)', marginBottom:8 }}>FOFITOS</div>
                   <div style={{ fontSize:'clamp(1.25rem,1.6vw,1.6rem)', fontWeight:800, color:'#fff', lineHeight:1.2, marginBottom:6 }}>{p.name}</div>
                   {p.tagline && <div style={{ fontSize:'0.78rem', color:'rgba(196,181,253,0.85)', lineHeight:1.45, marginBottom:12 }}>{p.tagline}</div>}
                   <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>

@@ -164,7 +164,8 @@ export default function HomePage() {
   useEffect(() => {
     sb.from('categories').select('*').order('sort_order')
       .then(({ data }) => {
-        setCats(data || [])
+        // Only show categories that are switched ON in the admin
+        setCats((data || []).filter(c => c.active !== false))
         setLoading(false)
       })
     // Fetch the single 'default' links row for the carousel media

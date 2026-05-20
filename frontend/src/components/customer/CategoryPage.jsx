@@ -343,11 +343,12 @@ export default function CategoryPage() {
 
     // Fetch products
     sb.from('products')
-      .select('id, name, img, price, tagline, rating, reviews, tags, is_veg, sort_order')
+      .select('id, name, img, price, tagline, rating, reviews, tags, is_veg, sort_order, active')
       .eq('cat', catId)
       .order('sort_order', { ascending: true })
       .then(({ data }) => {
-        const prods = data || []
+        // Only show products switched ON in the admin
+        const prods = (data || []).filter(p => p.active !== false)
         setProducts(prods)
         setLoading(false)
         prods.forEach(p => { if (p.img) { const i = new Image(); i.src = p.img } })

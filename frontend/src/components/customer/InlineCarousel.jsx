@@ -85,11 +85,11 @@ export default function InlineCarousel({ cat, skipAnimation = false, initialProd
     }, 2000)
 
     sb.from('products')
-      .select('id, name, img, price, tagline, rating, reviews, tags, is_veg')
+      .select('id, name, img, price, tagline, rating, reviews, tags, is_veg, active')
       .eq('cat', cat.id)
       .order('sort_order', { ascending: true })
       .then(({ data }) => {
-        const prods = data || []
+        const prods = (data || []).filter(p => p.active !== false)
         setProducts(prods)
         setActiveIdx(findIdx(prods))
         setLoading(false)

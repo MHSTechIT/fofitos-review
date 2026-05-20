@@ -634,17 +634,22 @@ body {
   cursor: pointer;
 }
 
-/* Desktop: the carousel card is 64/27 (wider than 16:9), so a YouTube iframe
-   would letterbox the video. Scale the iframe up so its 16:9 content fully
-   covers the card — the card's overflow:hidden clips the excess. */
+/* YouTube/Drive iframe is scaled up a little so the wrapper's overflow:hidden
+   clips the player's title-card (top) and logo (bottom) out of the frame. */
+iframe.hc-video {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 122%;
+  height: 122%;
+}
+/* Desktop: the carousel card is 64/27 (wider than 16:9), so the iframe must be
+   taller still for the 16:9 video to fully cover the wider card. */
 @media (min-width: 900px) {
   iframe.hc-video {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 100%;
-    height: 133.34%;          /* (64/27) ÷ (16/9) — makes the 16:9 iframe cover */
+    width: 122%;
+    height: 162.7%;           /* 133.34% cover × 1.22 crop */
   }
 }
 
@@ -710,6 +715,22 @@ body {
   z-index: 1;
 }
 
+/* Opaque cover — masks YouTube's title-card / channel / paused chrome.
+   Shown for the first few seconds of playback and whenever the video is
+   paused, then crossfades away to reveal a clean video. */
+.hc-cover {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  z-index: 2;
+  opacity: 1;
+  transition: opacity 0.45s ease;
+  pointer-events: none;
+}
+.hc-cover.is-hidden {
+  opacity: 0;
+}
+
 /* Mute toggle (top-right, on top of the strip) */
 .hc-mute {
   position: absolute;
@@ -720,7 +741,7 @@ body {
   background: rgba(0,0,0,0.55);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
-  z-index: 2;
+  z-index: 3;
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   transition: background 0.18s ease, transform 0.18s ease;
@@ -740,12 +761,32 @@ body {
   background: rgba(0,0,0,0.55);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
-  z-index: 2;
+  z-index: 3;
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   transition: background 0.18s ease, transform 0.18s ease;
 }
 .hc-fs:hover {
+  background: rgba(0,0,0,0.75);
+  transform: scale(1.08);
+}
+
+/* Play / pause toggle — bottom-right, mirrors the mute/fullscreen buttons */
+.hc-playpause {
+  position: absolute;
+  bottom: 10px; right: 12px;
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  z-index: 3;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+.hc-playpause:hover {
   background: rgba(0,0,0,0.75);
   transform: scale(1.08);
 }

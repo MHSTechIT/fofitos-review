@@ -84,24 +84,25 @@ export default function GroupPage() {
   useEffect(() => {
     window.scrollTo(0, 0)
     async function load() {
-      /* 1 — fetch all sub-categories in this group */
-      const { data: catData } = await sb
+      /* 1 — fetch all sub-categories in this group (only ON ones) */
+      const { data: catRaw } = await sb
         .from('categories')
         .select('*')
         .eq('group_name', decoded)
         .order('sort_order')
+      const catData = (catRaw || []).filter(c => c.active !== false)
 
-      if (!catData?.length) { setLoading(false); return }
+      if (!catData.length) { setLoading(false); return }
 
-      /* 2 — fetch products for each sub-category */
+      /* 2 — fetch products for each sub-category (only ON ones) */
       const result = []
       for (const cat of catData) {
         const { data: prods } = await sb
           .from('products')
-          .select('id, name, img, tagline, sort_order')
+          .select('id, name, img, tagline, sort_order, active')
           .eq('cat', cat.id)
           .order('sort_order', { ascending: true })
-        result.push({ cat, products: prods || [] })
+        result.push({ cat, products: (prods || []).filter(p => p.active !== false) })
       }
       setSections(result)
       setLoading(false)
