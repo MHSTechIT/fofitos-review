@@ -309,7 +309,7 @@ export default function AdminLayout() {
       <div className="floating-panel-wrapper">
       <header className="modern-top-panel">
         <div className="panel-left">
-          <div className="panel-logo">FOFiTOS</div>
+          <img src="/logo.png" alt="FOFiTOS" className="panel-logo" />
         </div>
 
         {/* Module Buttons */}

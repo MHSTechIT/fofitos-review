@@ -14,7 +14,6 @@ const __dirname  = path.dirname(__filename)
 const UPLOADS_DIR = process.env.UPLOADS_DIR
   ? path.resolve(__dirname, process.env.UPLOADS_DIR)
   : path.join(__dirname, 'uploads')
-const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || ''
 const PORT = parseInt(process.env.API_PORT || '8080', 10)
 
 // Whitelist tables that the API will accept — protects against arbitrary SQL
@@ -46,9 +45,12 @@ const app = express()
 app.use(cors())
 app.use(express.json({ limit: '5mb' }))
 
-// Ensure uploads dir exists, serve it statically at /uploads
+// Ensure uploads dir exists. Files are served under /api/uploads so they ride
+// the same /api route that is already proxied to this backend in production.
+// /uploads is kept as a back-compat alias for any older direct links.
 fs.mkdirSync(UPLOADS_DIR, { recursive: true })
-app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '1y', immutable: false }))
+app.use('/api/uploads', express.static(UPLOADS_DIR, { maxAge: '1y' }))
+app.use('/uploads',     express.static(UPLOADS_DIR, { maxAge: '1y' }))
 
 // --- Health check ---
 app.get('/api/health', async (_req, res) => {
@@ -124,6 +126,27 @@ function sanitizeRow(table, body) {
   return out
 }
 
+// Heal legacy image URLs saved before uploads moved under /api/uploads:
+//   http://localhost:PORT/uploads/<file>  →  /api/uploads/<file>
+//   /uploads/<file>                       →  /api/uploads/<file>
+// Runs on every GET response so old DB rows render correctly without a migration.
+function healUrls(value) {
+  if (typeof value === 'string') {
+    return value
+      .replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/uploads\//i, '/api/uploads/')
+      .replace(/^\/uploads\//, '/api/uploads/')
+  }
+  if (Array.isArray(value)) return value.map(healUrls)
+  // Only recurse into plain objects (e.g. JSONB columns). Date and other class
+  // instances must pass through untouched — walking a Date flattens it to {}.
+  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    const out = {}
+    for (const k of Object.keys(value)) out[k] = healUrls(value[k])
+    return out
+  }
+  return value
+}
+
 // --- File upload: POST /api/upload (multipart) ---
 // Registered BEFORE the generic /api/:table routes so "upload" is not
 // interpreted as a table name.
@@ -140,7 +163,8 @@ const upload = multer({
 
 app.post('/api/upload', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' })
-  const url = `${PUBLIC_BASE_URL}/uploads/${req.file.filename}`
+  // Relative URL — works on any host without baking in a base URL
+  const url = `/api/uploads/${req.file.filename}`
   res.json({ data: { url, filename: req.file.filename, size: req.file.size } })
 })
 
@@ -214,7 +238,7 @@ app.get('/api/:table', async (req, res) => {
       `SELECT ${selectSql} FROM public."${table}"${whereSql}${orderSql}${limitSql}${offsetSql}`,
       params
     )
-    res.json({ data: r.rows, count: total })
+    res.json({ data: healUrls(r.rows), count: total })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
@@ -228,7 +252,7 @@ app.get('/api/:table/:id', async (req, res) => {
   const selectSql = parseSelect(req.query.select)
   try {
     const r = await query(`SELECT ${selectSql} FROM public."${table}" WHERE "${pk}" = $1 LIMIT 1`, [id])
-    res.json({ data: r.rows[0] || null })
+    res.json({ data: healUrls(r.rows[0] || null) })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }

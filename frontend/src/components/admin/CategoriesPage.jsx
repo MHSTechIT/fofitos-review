@@ -162,12 +162,17 @@ export default function CategoriesPage() {
       sort_order: form.sort_order,
       group_name: form.group_name?.trim() || null,
     }
+    let result
     if (editing) {
-      await sb.from('categories').update(payload).eq('id', form.id)
+      result = await sb.from('categories').update(payload).eq('id', form.id)
     } else {
-      await sb.from('categories').insert({ id: form.id, ...payload })
+      result = await sb.from('categories').insert({ id: form.id, ...payload })
     }
     setSaving(false)
+    if (result?.error) {
+      showNotif('⚠ ' + result.error.message)
+      return
+    }
     setModal(false)
     showNotif(editing ? '✓ Category updated' : '✓ Category added')
     load()

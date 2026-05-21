@@ -32,7 +32,7 @@ export default function Footer() {
   const phone2Href = `tel:${d.footer_phone2.replace(/\s/g, '')}`
 
   const contactBlock = (
-    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+    <div className="footer-contact" style={{ display:'flex', flexDirection:'column', gap:8 }}>
       {(d.footer_phone1 || d.footer_phone2) && (
         <a href={phone1Href} style={{ display:'flex', alignItems:'center', gap:8, textDecoration:'none' }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#bbb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -64,10 +64,10 @@ export default function Footer() {
       background: 'transparent',
     }}>
       <div className="footer-inner">
-      {/* ── Row: company left | contact right ── */}
-      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:16, flexWrap:'wrap' }}>
+      {/* ── Row: company + contact | logo — centred column on mobile, row on desktop ── */}
+      <div className="footer-row">
 
-        {/* Company block */}
+        {/* Company block + contact */}
         <div>
           <div style={{ fontSize:'0.58rem', fontWeight:600, letterSpacing:'2px', textTransform:'uppercase', color:'#bbb', marginBottom:3 }}>
             A Product Of
@@ -80,16 +80,14 @@ export default function Footer() {
             {d.footer_gst   && <>GST {d.footer_gst}</>}
           </div>
 
-          {/* Mobile only: contact below company */}
-          <div className="footer-contact-mobile" style={{ marginTop:10 }}>
+          {/* Contact — moved to the left, below the company info */}
+          <div style={{ marginTop:10 }}>
             {contactBlock}
           </div>
         </div>
 
-        {/* Desktop only: contact right-aligned */}
-        <div className="footer-contact-desktop" style={{ textAlign:'right' }}>
-          {contactBlock}
-        </div>
+        {/* Right: logo */}
+        <img src="/logo.png" alt={d.footer_company} className="footer-logo" />
       </div>
 
       {/* Copyright */}
@@ -98,11 +96,33 @@ export default function Footer() {
       </div>
 
       <style>{`
-        .footer-contact-mobile  { display: block; }
-        .footer-contact-desktop { display: none !important; }
+        /* Mobile-first: stacked + centred, logo on top */
+        .footer-row {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+          gap: 14px;
+        }
+        .footer-logo {
+          flex-shrink: 0;
+          height: 40px;
+          width: auto;
+          object-fit: contain;
+          order: -1;                 /* logo first on mobile */
+        }
+        .footer-contact { align-items: center; }
+        /* Desktop: company + contact on the left, logo on the right */
         @media (min-width: 768px) {
-          .footer-contact-mobile  { display: none !important; }
-          .footer-contact-desktop { display: block !important; }
+          .footer-row {
+            flex-direction: row;
+            align-items: flex-start;
+            justify-content: space-between;
+            text-align: left;
+            gap: 16px;
+          }
+          .footer-logo { height: 90px; order: 0; }
+          .footer-contact { align-items: flex-start; }
         }
         .footer-inner {
           padding: 16px 16px 28px;

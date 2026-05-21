@@ -19,9 +19,11 @@ function youtubeId(url) {
 }
 
 function youtubeEmbed(url, autoplay) {
-  const base = `autoplay=${autoplay ? 1 : 0}&mute=1&playsinline=1&controls=0&modestbranding=1&rel=0&iv_load_policy=3&fs=0&disablekb=1&loop=1&enablejsapi=1`
+  // No loop=/playlist= here — a playlist makes YouTube render prev/next buttons
+  // in its chrome. Looping is handled in JS via the ENDED state event instead.
+  const base = `autoplay=${autoplay ? 1 : 0}&mute=1&playsinline=1&controls=0&modestbranding=1&rel=0&iv_load_policy=3&fs=0&disablekb=1&enablejsapi=1`
   const id = youtubeId(url)
-  if (id) return `https://www.youtube.com/embed/${id}?${base}&playlist=${id}`
+  if (id) return `https://www.youtube.com/embed/${id}?${base}`
   return null
 }
 function youtubeThumb(url) {
@@ -43,11 +45,10 @@ function driveEmbed(url, autoplay) {
 function VideoSlide({ url, autoplay, isActive, onFullscreenChange }) {
   // When autoplay is true we render the iframe immediately.
   // When autoplay is false we show a thumbnail + play button; clicking play swaps to the iframe.
-  const [playing,     setPlaying]     = useState(autoplay)
-  const [muted,       setMuted]       = useState(true)
-  const [fullscreen,  setFullscreen]  = useState(false)
-  const [videoPaused, setVideoPaused] = useState(false)   // custom play/pause state
-  const [cover,       setCover]       = useState(true)    // masks YouTube's own chrome
+  const [playing,    setPlaying]    = useState(autoplay)
+  const [muted,      setMuted]      = useState(true)
+  const [fullscreen, setFullscreen] = useState(false)
+  const [cover,      setCover]      = useState(true)    // masks YouTube's own chrome
   const iframeRef = useRef(null)
   const videoRef  = useRef(null)
 
@@ -65,14 +66,41 @@ function VideoSlide({ url, autoplay, isActive, onFullscreenChange }) {
   // If admin toggles autoplay later, react to the new prop
   useEffect(() => { setPlaying(autoplay) }, [autoplay])
 
-  // When the iframe (re)starts, YouTube flashes its own title-card / channel /
-  // skip-buttons chrome for a few seconds. Keep an opaque cover over the player
-  // until that auto-hides, so only a clean video is ever shown.
+  // When the iframe (re)starts — or the user toggles fullscreen — YouTube
+  // flashes its own chrome for a few seconds. Keep an opaque cover over the
+  // player until that auto-hides, so only a clean video is ever shown.
   useEffect(() => {
     if (!playing) { setCover(true); return }
+    setCover(true)
     const t = setTimeout(() => setCover(false), 3800)
     return () => clearTimeout(t)
-  }, [playing])
+  }, [playing, fullscreen])
+
+  // Loop the video without YouTube's loop=/playlist= trick (a playlist makes
+  // the player show prev/next buttons). Listen for the ENDED state and replay.
+  useEffect(() => {
+    if (!playing || !isYouTube(url)) return
+    const iframe = iframeRef.current
+    if (!iframe) return
+    const ping = () => iframe.contentWindow?.postMessage('{"event":"listening"}', '*')
+    const onMessage = (e) => {
+      if (e.source !== iframe.contentWindow) return
+      let d; try { d = JSON.parse(e.data) } catch { return }
+      if (d?.event === 'onStateChange' && d.info === 0) {
+        iframe.contentWindow?.postMessage('{"event":"command","func":"playVideo","args":[]}', '*')
+      }
+    }
+    window.addEventListener('message', onMessage)
+    iframe.addEventListener('load', ping)
+    ping()
+    const t1 = setTimeout(ping, 1000)
+    const t2 = setTimeout(ping, 2500)
+    return () => {
+      window.removeEventListener('message', onMessage)
+      iframe.removeEventListener('load', ping)
+      clearTimeout(t1); clearTimeout(t2)
+    }
+  }, [playing, url])
 
   // When this slide is no longer the active one, mute it so the previous
   // slide's audio goes silent as the carousel crossfades to the next.
@@ -101,27 +129,10 @@ function VideoSlide({ url, autoplay, isActive, onFullscreenChange }) {
     if (videoRef.current) videoRef.current.muted = next
   }
 
-  // CSS-based fullscreen toggle — keeps our own overlays (click-blocker + buttons)
+  // CSS-based fullscreen toggle — keeps our own overlays (click-blocker + cover)
   // so YouTube's native chrome never shows. Press again to return to normal size.
   function toggleFullscreen() {
     setFullscreen(f => !f)
-  }
-
-  // Custom play / pause. While paused, YouTube would show its own paused
-  // overlay (title + centre play button) — so we drop the cover back over it.
-  function togglePlay() {
-    const next = !videoPaused
-    setVideoPaused(next)
-    setCover(next)
-    if (iframeRef.current?.contentWindow) {
-      iframeRef.current.contentWindow.postMessage(
-        JSON.stringify({ event:'command', func: next ? 'pauseVideo' : 'playVideo', args: [] }), '*'
-      )
-    }
-    if (videoRef.current) {
-      if (next) videoRef.current.pause()
-      else      videoRef.current.play()
-    }
   }
 
   if (!playing) {
@@ -218,23 +229,6 @@ function VideoSlide({ url, autoplay, isActive, onFullscreenChange }) {
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
             <path d="M11 5L6 9H3v6h3l5 4V5z" stroke="#fff" strokeWidth="2" strokeLinejoin="round"/>
             <path d="M16 8a5 5 0 010 8M19 5a9 9 0 010 14" stroke="#fff" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
-        )}
-      </button>
-
-      {/* Play / pause toggle (bottom-right) */}
-      <button
-        onClick={togglePlay}
-        aria-label={videoPaused ? 'Play' : 'Pause'}
-        className="hc-playpause"
-      >
-        {videoPaused ? (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="#fff">
-            <path d="M8 5v14l11-7z"/>
-          </svg>
-        ) : (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="#fff">
-            <path d="M7 5h3.4v14H7zM13.6 5H17v14h-3.4z"/>
           </svg>
         )}
       </button>

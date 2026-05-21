@@ -63,11 +63,10 @@
 }
 
 .panel-logo {
-  font-size: 1rem;
-  font-weight: 800;
-  letter-spacing: 2px;
-  color: var(--purple);
-  white-space: nowrap;
+  height: 30px;
+  width: auto;
+  object-fit: contain;
+  display: block;
 }
 
 /* Module buttons area */
@@ -143,7 +142,7 @@
     padding-right: 18px;
   }
   .panel-logo {
-    font-size: 1.15rem;
+    height: 34px;
   }
   .module-btn {
     padding: 8px 16px;

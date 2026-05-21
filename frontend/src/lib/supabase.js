@@ -171,7 +171,7 @@ const storage = {
         }
       },
       getPublicUrl(filename) {
-        const url = uploadedUrls.get(filename) || `${STORAGE_BASE}/uploads/${filename}`
+        const url = uploadedUrls.get(filename) || `${STORAGE_BASE}/api/uploads/${filename}`
         return { data: { publicUrl: url } }
       },
     }

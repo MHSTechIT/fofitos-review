@@ -13,7 +13,7 @@ function fmtTime(ts) {
 }
 
 export default function Dashboard() {
-  const [stats, setStats] = useState({ cats: 0, prods: 0, revs: 0, avgRating: 0 })
+  const [stats, setStats] = useState({ cats: 0, prods: 0 })
   const [recentProducts, setRecentProducts] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -21,13 +21,8 @@ export default function Dashboard() {
     Promise.all([
       sb.from('categories').select('id', { count: 'exact', head: true }),
       sb.from('products').select('id, name, img, cat, created_at, updated_at, done_by', { count: 'exact' }).order('updated_at', { ascending: false }),
-      sb.from('reviews').select('id', { count: 'exact', head: true }),
-      sb.from('products').select('rating'),
-    ]).then(([{ count: catCount }, { data: prods, count: prodCount }, { count: revCount }, { data: allRatings }]) => {
-      const avg = allRatings?.length
-        ? (allRatings.reduce((s, p) => s + (p.rating || 0), 0) / allRatings.length).toFixed(1)
-        : '—'
-      setStats({ cats: catCount || 0, prods: prodCount || 0, revs: revCount || 0, avgRating: avg })
+    ]).then(([{ count: catCount }, { data: prods, count: prodCount }]) => {
+      setStats({ cats: catCount || 0, prods: prodCount || 0 })
       setRecentProducts((prods || []).slice(0, 5))
       setLoading(false)
     })
@@ -39,25 +34,15 @@ export default function Dashboard() {
     <>
       <div className="admin-content">
         <div className="stats-grid">
-          <div className="stat-card">
+          <div className="stat-card" style={{ flex: 1 }}>
             <div className="stat-label">Categories</div>
             <div className="stat-value">{stats.cats}</div>
             <div className="stat-sub">menu sections</div>
           </div>
-          <div className="stat-card">
+          <div className="stat-card" style={{ flex: 1 }}>
             <div className="stat-label">Products</div>
             <div className="stat-value">{stats.prods}</div>
             <div className="stat-sub">items on menu</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">Reviews</div>
-            <div className="stat-value">{stats.revs}</div>
-            <div className="stat-sub">customer reviews</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">Avg Rating</div>
-            <div className="stat-value">{stats.avgRating}</div>
-            <div className="stat-sub">across all items</div>
           </div>
         </div>
 

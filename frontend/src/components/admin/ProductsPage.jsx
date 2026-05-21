@@ -352,7 +352,7 @@ export default function ProductsPage() {
 
   async function load() {
     const [{ data: prods }, { data: catData }] = await Promise.all([
-      sb.from('products').select('id, name, img, cat, price, rating, tagline, active'),
+      sb.from('products').select('id, name, img, cat, price, rating, tagline, active, updated_at, created_at'),
       sb.from('categories').select('id, name').order('sort_order'),
     ])
     setProducts(prods || [])
@@ -409,15 +409,20 @@ export default function ProductsPage() {
       tags: form.tags, nutrition: form.nutrition, ingr: form.ingr,
       done_by: doneBy,
     }
+    let result
     if (editing) {
       // Stamp the edit time; created_at is left untouched
       payload.updated_at = new Date().toISOString()
-      await sb.from('products').update(payload).eq('id', form.id)
+      result = await sb.from('products').update(payload).eq('id', form.id)
     } else {
       // New product — created_at & updated_at use the DB default (NOW())
-      await sb.from('products').insert(payload)
+      result = await sb.from('products').insert(payload)
     }
     setSaving(false)
+    if (result?.error) {
+      showNotif('⚠ ' + result.error.message)
+      return
+    }
     setModal(false)
     showNotif(editing ? '✓ Product updated' : '✓ Product added')
     load()
@@ -432,11 +437,20 @@ export default function ProductsPage() {
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
-  const filtered = products.filter(p => {
-    const matchCat = !filterCat || p.cat === filterCat
-    const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase())
-    return matchCat && matchSearch
-  })
+  // Newest product first — ordered purely by creation time. Editing a product
+  // changes updated_at but NOT created_at, so an edit never moves its row;
+  // only a freshly created product appears at the top.
+  const createdTime = (p) => {
+    const t = p.created_at ? new Date(p.created_at).getTime() : 0
+    return Number.isNaN(t) ? 0 : t
+  }
+  const filtered = products
+    .filter(p => {
+      const matchCat = !filterCat || p.cat === filterCat
+      const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase())
+      return matchCat && matchSearch
+    })
+    .sort((a, b) => createdTime(b) - createdTime(a))
 
   return (
     <>
