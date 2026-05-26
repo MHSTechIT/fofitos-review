@@ -12,7 +12,7 @@ function emptyProduct() {
     cat: '', name: '', img: '', tagline: '', price: '',
     rating: 4.0, reviews: 0,
     is_veg: true,
-    cal: 0, pro: 0, carb: 0, fat: 0, fibre: 0,
+    cal: 0, pro: 0, carb: 0, fat: 0,
     tags: [], nutrition: [], ingr: [],
   }
 }
@@ -288,19 +288,22 @@ function IngrEditor({ rows, onChange }) {
 }
 
 /* ── Live macro preview — mirrors the customer "Calorie Breakdown" ── */
-function MacroPreview({ cal, pro, carb, fat, fibre }) {
-  const c    = parseInt(carb)  || 0
-  const p    = parseInt(pro)   || 0
-  const f    = parseInt(fat)   || 0
-  const fb   = parseInt(fibre) || 0
-  const kcal = parseInt(cal)   || 0
-  const total = Math.max(c + p + f + fb, 1)
+function MacroPreview({ cal, pro, carb, fat }) {
+  const c    = parseFloat(carb)  || 0
+  const p    = parseFloat(pro)   || 0
+  const f    = parseFloat(fat)   || 0
+  const kcal = parseFloat(cal)   || 0
+
+  // 4-4-9 rule — percentages reflect calorie contribution, not grams
+  const cK = c * 4
+  const pK = p * 4
+  const fK = f * 9
+  const totalK = Math.max(cK + pK + fK, 1)
 
   const rows = [
-    { label: 'Carbs',   val: c,  color: '#4A90D9' },
-    { label: 'Protein', val: p,  color: '#2CB67D' },
-    { label: 'Fat',     val: f,  color: '#E05252' },
-    { label: 'Fibre',   val: fb, color: '#C8BEA8' },
+    { label: 'Carbs',   val: c, kcalVal: cK, color: '#4A90D9' },
+    { label: 'Protein', val: p, kcalVal: pK, color: '#2CB67D' },
+    { label: 'Fat',     val: f, kcalVal: fK, color: '#E05252' },
   ]
 
   return (
@@ -318,7 +321,7 @@ function MacroPreview({ cal, pro, carb, fat, fibre }) {
         </span>
       </div>
       {rows.map(r => {
-        const pct = Math.round((r.val / total) * 100)
+        const pct = ((r.kcalVal / totalK) * 100).toFixed(1)
         return (
           <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 9 }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 7, width: 78, flexShrink: 0 }}>
@@ -349,6 +352,9 @@ export default function ProductsPage() {
   const [confirm, setConfirm] = useState(null)
   const [filterCat, setFilterCat] = useState('')
   const [search, setSearch] = useState('')
+  // Tracks whether the admin has manually typed a Calories value. When false,
+  // editing any of Carbs/Protein/Fat auto-fills cal using the 4-4-9 rule.
+  const [calManual, setCalManual] = useState(false)
 
   async function load() {
     const [{ data: prods }, { data: catData }] = await Promise.all([
@@ -376,6 +382,7 @@ export default function ProductsPage() {
 
   function openAdd() {
     setForm(emptyProduct())
+    setCalManual(false)   // new product → auto-fill Calories from macros
     setEditing(false)
     setModal(true)
   }
@@ -390,6 +397,15 @@ export default function ProductsPage() {
       nutrition: Array.isArray(data.nutrition) ? data.nutrition : [],
       ingr: Array.isArray(data.ingr) ? data.ingr : [],
     })
+    // If saved cal matches 4-4-9 of the saved macros, stay in auto mode so
+    // editing macros keeps updating it. Otherwise treat the saved value as a
+    // manual override and don't overwrite.
+    const sc = parseFloat(data.carb) || 0
+    const sp = parseFloat(data.pro)  || 0
+    const sf = parseFloat(data.fat)  || 0
+    const scal = parseFloat(data.cal) || 0
+    const scomputed = sc * 4 + sp * 4 + sf * 9
+    setCalManual(scal > 0 && Math.abs(scal - scomputed) > 0.5)
     setEditing(true)
     setModal(true)
   }
@@ -403,9 +419,8 @@ export default function ProductsPage() {
       price: form.price, rating: parseFloat(form.rating) || 4.0,
       reviews: parseInt(form.reviews) || 0,
       is_veg: form.is_veg !== false,
-      cal: parseInt(form.cal) || 0, pro: parseInt(form.pro) || 0,
-      carb: parseInt(form.carb) || 0, fat: parseInt(form.fat) || 0,
-      fibre: parseInt(form.fibre) || 0,
+      cal: parseFloat(form.cal) || 0, pro: parseFloat(form.pro) || 0,
+      carb: parseFloat(form.carb) || 0, fat: parseFloat(form.fat) || 0,
       tags: form.tags, nutrition: form.nutrition, ingr: form.ingr,
       done_by: doneBy,
     }
@@ -436,6 +451,28 @@ export default function ProductsPage() {
   }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  /* Macro-aware setter — used only for cal / pro / carb / fat inputs.
+     - Typing into Calories switches to manual mode (or back to auto if cleared/0).
+     - Typing into Carbs / Protein / Fat re-runs the 4-4-9 calc into cal,
+       *unless* the admin is in manual mode. */
+  const setMacro = (k, v) => {
+    setForm(f => {
+      const next = { ...f, [k]: v }
+      if (k !== 'cal' && !calManual) {
+        const c  = parseFloat(k === 'carb' ? v : next.carb) || 0
+        const p  = parseFloat(k === 'pro'  ? v : next.pro)  || 0
+        const fa = parseFloat(k === 'fat'  ? v : next.fat)  || 0
+        next.cal = c * 4 + p * 4 + fa * 9
+      }
+      return next
+    })
+    if (k === 'cal') {
+      const num = parseFloat(v)
+      // Empty or 0 → revert to auto; any positive number → manual override
+      setCalManual(!Number.isNaN(num) && num > 0)
+    }
+  }
 
   // Newest product first — ordered purely by creation time. Editing a product
   // changes updated_at but NOT created_at, so an edit never moves its row;
@@ -568,15 +605,20 @@ export default function ProductsPage() {
 
               <div className="form-section">Macros</div>
               <div className="form-grid">
-                {[['cal','Calories (kcal)'],['pro','Protein (g)'],['carb','Carbs (g)'],['fat','Fat (g)'],['fibre','Fibre (g)']].map(([k, label]) => (
+                {[['cal','Calories (kcal)'],['pro','Protein (g)'],['carb','Carbs (g)'],['fat','Fat (g)']].map(([k, label]) => (
                   <div key={k} className="form-group">
                     <label className="f-label">{label}</label>
-                    <input className="f-input" type="number" value={form[k]} onChange={e => set(k, e.target.value)} />
+                    <input className="f-input" type="number" step="any" min="0" value={form[k]} onChange={e => setMacro(k, e.target.value)} />
+                    {k === 'cal' && !calManual && (
+                      <div style={{ fontSize: '0.68rem', color: 'var(--muted)', marginTop: 4, fontStyle: 'italic' }}>
+                        Auto-filled from macros — type to override
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
               {/* Live preview — updates as the macro fields are typed */}
-              <MacroPreview cal={form.cal} pro={form.pro} carb={form.carb} fat={form.fat} fibre={form.fibre} />
+              <MacroPreview cal={form.cal} pro={form.pro} carb={form.carb} fat={form.fat} />
 
               <div className="form-section">Tags</div>
               <TagInput tags={form.tags} onChange={v => set('tags', v)} />

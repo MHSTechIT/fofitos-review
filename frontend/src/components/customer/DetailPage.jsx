@@ -34,46 +34,51 @@ function avatarColor(name) {
 }
 
 /* ── Calorie breakdown donut ── */
-function ActivityRings({ pro, fat, carb, fibre, cal, revealed = false }) {
+function ActivityRings({ pro, fat, carb, cal, revealed = false }) {
   const SIZE = 180
   const C    = SIZE / 2          // 90
   const R    = 70                // ring radius
   const SW   = 22                // thick stroke to match screenshot
   const circ = 2 * Math.PI * R
 
-  // Donut total includes all four macros so Fibre gets its own segment
-  const total = Math.max((carb||0) + (pro||0) + (fat||0) + (fibre||0), 1)
+  // 4-4-9 rule — arcs & % reflect calorie contribution, not grams.
+  // (1 g carb = 4 kcal, 1 g protein = 4 kcal, 1 g fat = 9 kcal)
+  const carbG = carb || 0
+  const proG  = pro  || 0
+  const fatG  = fat  || 0
+  const cK = carbG * 4
+  const pK = proG  * 4
+  const fK = fatG  * 9
+  const totalK = Math.max(cK + pK + fK, 1)
 
   const segments = [
-    { label:'Carbs',   val: carb ||0, color:'#4A90D9' },
-    { label:'Protein', val: pro  ||0, color:'#2CB67D' },
-    { label:'Fat',     val: fat  ||0, color:'#E05252' },
-    { label:'Fibre',   val: fibre||0, color:'#C8BEA8' },
+    { label:'Carbs',   kcalVal: cK, color:'#4A90D9' },
+    { label:'Protein', kcalVal: pK, color:'#2CB67D' },
+    { label:'Fat',     kcalVal: fK, color:'#E05252' },
   ]
 
   // Gap between segments in degrees (creates the white notch).
-  // Only count gaps for segments that actually have a value, so a zero
+  // Only count gaps for segments that actually contribute calories, so a zero
   // macro doesn't eat arc length.
   const GAP_DEG = 6
   const GAP_ARC = (GAP_DEG / 360) * circ
-  const visibleCount = segments.filter(s => s.val > 0).length || 1
+  const visibleCount = segments.filter(s => s.kcalVal > 0).length || 1
   const usable  = circ - visibleCount * GAP_ARC
 
   // Build arc start angles
   let angle = -90   // 12 o'clock
   const arcs = segments.map(seg => {
-    const arcLen   = (seg.val / total) * usable
+    const arcLen   = (seg.kcalVal / totalK) * usable
     const rotAngle = angle
-    angle += (arcLen / circ) * 360 + (seg.val > 0 ? GAP_DEG : 0)
+    angle += (arcLen / circ) * 360 + (seg.kcalVal > 0 ? GAP_DEG : 0)
     return { ...seg, arcLen, rotAngle }
   })
 
-  // Legend uses the same total as the donut
+  // Legend uses the same kcal total as the donut, 1 decimal place
   const legend = [
-    { l:'Carbs',   pct: Math.round((carb  ||0)/total*100), c:'#4A90D9' },
-    { l:'Protein', pct: Math.round((pro   ||0)/total*100), c:'#2CB67D' },
-    { l:'Fat',     pct: Math.round((fat   ||0)/total*100), c:'#E05252' },
-    { l:'Fibre',   pct: Math.round((fibre ||0)/total*100), c:'#C8BEA8' },
+    { l:'Carbs',   pct: ((cK / totalK) * 100).toFixed(1), c:'#4A90D9' },
+    { l:'Protein', pct: ((pK / totalK) * 100).toFixed(1), c:'#2CB67D' },
+    { l:'Fat',     pct: ((fK / totalK) * 100).toFixed(1), c:'#E05252' },
   ]
 
   return (
@@ -551,7 +556,7 @@ export default function DetailPage() {
         {/* ══ CALORIE BREAKDOWN ══ */}
         <div style={{margin:'12px 16px 0',background:'#fff',borderRadius:16,padding:'16px 18px',boxShadow:'0 1px 6px rgba(0,0,0,0.05)',animation:contentAnim('fadeUp',0.34)}}>
           <div style={{fontSize:'0.68rem',fontWeight:700,letterSpacing:'1.5px',textTransform:'uppercase',color:'#aaa',marginBottom:14}}>Calorie Breakdown</div>
-          <ActivityRings pro={p.pro} fat={p.fat} carb={p.carb} fibre={p.fibre} cal={p.cal} revealed={chartIn}/>
+          <ActivityRings pro={p.pro} fat={p.fat} carb={p.carb} cal={p.cal} revealed={chartIn}/>
         </div>
 
         {/* ══ NUTRITION FACTS ══ */}
@@ -748,7 +753,7 @@ export default function DetailPage() {
               {/* Calorie Breakdown */}
               <div style={{ background:'#fff', borderRadius:16, padding:'20px 22px', boxShadow:'0 1px 8px rgba(76,29,149,0.07)' }}>
                 <div style={{ fontSize:'0.63rem', fontWeight:700, letterSpacing:'1.5px', textTransform:'uppercase', color:'#C4B5FD', marginBottom:16 }}>Calorie Breakdown</div>
-                <ActivityRings pro={p.pro} fat={p.fat} carb={p.carb} fibre={p.fibre} cal={p.cal} revealed={chartIn}/>
+                <ActivityRings pro={p.pro} fat={p.fat} carb={p.carb} cal={p.cal} revealed={chartIn}/>
               </div>
 
               {/* Nutrition Facts */}
