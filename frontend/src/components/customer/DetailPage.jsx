@@ -110,10 +110,12 @@ function ActivityRings({ pro, fat, carb, cal, revealed = false }) {
             />
           ))}
 
-          {/* Center: calorie number */}
+          {/* Center: calorie number — defensive round-to-1-decimal so any
+              legacy FP-dust values from the DB (e.g. 283.90000000000003)
+              still display cleanly as 283.9. */}
           <text x={C} y={C + 8} textAnchor="middle"
             fill="#1a1a2e" fontSize="26" fontWeight="800" fontFamily="Outfit,sans-serif"
-          >{cal || 0}</text>
+          >{Math.round((parseFloat(cal) || 0) * 10) / 10}</text>
           <text x={C} y={C + 24} textAnchor="middle"
             fill="#aaa" fontSize="12" fontFamily="Outfit,sans-serif"
           >kcal</text>

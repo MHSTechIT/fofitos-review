@@ -292,7 +292,9 @@ function MacroPreview({ cal, pro, carb, fat }) {
   const c    = parseFloat(carb)  || 0
   const p    = parseFloat(pro)   || 0
   const f    = parseFloat(fat)   || 0
-  const kcal = parseFloat(cal)   || 0
+  // 1-decimal cap — keeps the kcal display clean even if `cal` carries
+  // floating-point dust like 283.90000000000003.
+  const kcal = Math.round((parseFloat(cal) || 0) * 10) / 10
 
   // 4-4-9 rule — percentages reflect calorie contribution, not grams
   const cK = c * 4
@@ -390,8 +392,18 @@ export default function ProductsPage() {
   async function openEdit(id) {
     const { data } = await sb.from('products').select('*').eq('id', id).single()
     if (!data) return
+    // Round legacy values so old floating-point dust (e.g. 283.90000000000003)
+    // doesn't appear in the inputs when admins reopen a product for editing.
+    const r1 = (v) => {
+      const n = parseFloat(v)
+      return Number.isNaN(n) ? 0 : Math.round(n * 10) / 10
+    }
     setForm({
       ...data,
+      cal:  r1(data.cal),
+      pro:  r1(data.pro),
+      carb: r1(data.carb),
+      fat:  r1(data.fat),
       is_veg: data.is_veg !== false,
       tags: Array.isArray(data.tags) ? data.tags : [],
       nutrition: Array.isArray(data.nutrition) ? data.nutrition : [],
@@ -400,11 +412,11 @@ export default function ProductsPage() {
     // If saved cal matches 4-4-9 of the saved macros, stay in auto mode so
     // editing macros keeps updating it. Otherwise treat the saved value as a
     // manual override and don't overwrite.
-    const sc = parseFloat(data.carb) || 0
-    const sp = parseFloat(data.pro)  || 0
-    const sf = parseFloat(data.fat)  || 0
-    const scal = parseFloat(data.cal) || 0
-    const scomputed = sc * 4 + sp * 4 + sf * 9
+    const sc = r1(data.carb)
+    const sp = r1(data.pro)
+    const sf = r1(data.fat)
+    const scal = r1(data.cal)
+    const scomputed = r1(sc * 4 + sp * 4 + sf * 9)
     setCalManual(scal > 0 && Math.abs(scal - scomputed) > 0.5)
     setEditing(true)
     setModal(true)
@@ -419,8 +431,8 @@ export default function ProductsPage() {
       price: form.price, rating: parseFloat(form.rating) || 4.0,
       reviews: parseInt(form.reviews) || 0,
       is_veg: form.is_veg !== false,
-      cal: parseFloat(form.cal) || 0, pro: parseFloat(form.pro) || 0,
-      carb: parseFloat(form.carb) || 0, fat: parseFloat(form.fat) || 0,
+      cal: round1(form.cal), pro: round1(form.pro),
+      carb: round1(form.carb), fat: round1(form.fat),
       tags: form.tags, nutrition: form.nutrition, ingr: form.ingr,
       done_by: doneBy,
     }
@@ -452,10 +464,18 @@ export default function ProductsPage() {
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
+  /* Round any numeric-ish value to one decimal place. Returns a clean number
+     (not a string), so 283.90000000000003 → 283.9 and 1.26666 → 1.3. */
+  const round1 = (v) => {
+    const n = parseFloat(v)
+    return Number.isNaN(n) ? 0 : Math.round(n * 10) / 10
+  }
+
   /* Macro-aware setter — used only for cal / pro / carb / fat inputs.
      - Typing into Calories switches to manual mode (or back to auto if cleared/0).
      - Typing into Carbs / Protein / Fat re-runs the 4-4-9 calc into cal,
-       *unless* the admin is in manual mode. */
+       *unless* the admin is in manual mode. The auto-filled cal is rounded
+       to 1 decimal so it never shows floating-point dust. */
   const setMacro = (k, v) => {
     setForm(f => {
       const next = { ...f, [k]: v }
@@ -463,7 +483,7 @@ export default function ProductsPage() {
         const c  = parseFloat(k === 'carb' ? v : next.carb) || 0
         const p  = parseFloat(k === 'pro'  ? v : next.pro)  || 0
         const fa = parseFloat(k === 'fat'  ? v : next.fat)  || 0
-        next.cal = c * 4 + p * 4 + fa * 9
+        next.cal = round1(c * 4 + p * 4 + fa * 9)
       }
       return next
     })
@@ -472,6 +492,15 @@ export default function ProductsPage() {
       // Empty or 0 → revert to auto; any positive number → manual override
       setCalManual(!Number.isNaN(num) && num > 0)
     }
+  }
+
+  /* Snap a typed macro value to 1 decimal when the input loses focus, so a
+     long-decimal like 1.26666 cleans up to 1.3 without disrupting typing. */
+  const macroBlur = (k) => (e) => {
+    const v = e.target.value
+    if (v === '' || v === '-') return                 // leave empty / partial intact
+    const rounded = round1(v)
+    if (String(rounded) !== String(parseFloat(v))) setMacro(k, String(rounded))
   }
 
   // Newest product first — ordered purely by creation time. Editing a product
@@ -608,7 +637,7 @@ export default function ProductsPage() {
                 {[['cal','Calories (kcal)'],['pro','Protein (g)'],['carb','Carbs (g)'],['fat','Fat (g)']].map(([k, label]) => (
                   <div key={k} className="form-group">
                     <label className="f-label">{label}</label>
-                    <input className="f-input" type="number" step="any" min="0" value={form[k]} onChange={e => setMacro(k, e.target.value)} />
+                    <input className="f-input" type="number" step="any" min="0" value={form[k]} onChange={e => setMacro(k, e.target.value)} onBlur={macroBlur(k)} />
                     {k === 'cal' && !calManual && (
                       <div style={{ fontSize: '0.68rem', color: 'var(--muted)', marginTop: 4, fontStyle: 'italic' }}>
                         Auto-filled from macros — type to override
