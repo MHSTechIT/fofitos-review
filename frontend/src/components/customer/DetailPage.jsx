@@ -33,12 +33,15 @@ function avatarColor(name) {
   return colors[h]
 }
 
-/* ── Calorie breakdown donut ── */
-function ActivityRings({ pro, fat, carb, cal, revealed = false }) {
+/* ── Calorie breakdown — animated pie chart ──
+   Built from a single circle whose stroke is thick enough to fill all the way
+   to the centre (no hole), so each dash-array arc reads as a solid pie wedge.
+   A white under-circle shows through the small gaps as crisp slice dividers. */
+function MacroPie({ pro, fat, carb, cal, revealed = false }) {
   const SIZE = 180
-  const C    = SIZE / 2          // 90
-  const R    = 70                // ring radius
-  const SW   = 22                // thick stroke to match screenshot
+  const C    = SIZE / 2          // 90 — centre
+  const R    = SIZE / 4          // 45 — path radius (stroke straddles it)
+  const SW   = SIZE / 2          // 90 — stroke reaches the centre → solid pie
   const circ = 2 * Math.PI * R
 
   // 4-4-9 rule — arcs & % reflect calorie contribution, not grams.
@@ -57,10 +60,8 @@ function ActivityRings({ pro, fat, carb, cal, revealed = false }) {
     { label:'Fat',     kcalVal: fK, color:'#E05252' },
   ]
 
-  // Gap between segments in degrees (creates the white notch).
-  // Only count gaps for segments that actually contribute calories, so a zero
-  // macro doesn't eat arc length.
-  const GAP_DEG = 6
+  // Thin white divider between slices. Only contributing segments take a gap.
+  const GAP_DEG = 2.5
   const GAP_ARC = (GAP_DEG / 360) * circ
   const visibleCount = segments.filter(s => s.kcalVal > 0).length || 1
   const usable  = circ - visibleCount * GAP_ARC
@@ -69,29 +70,38 @@ function ActivityRings({ pro, fat, carb, cal, revealed = false }) {
   let angle = -90   // 12 o'clock
   const arcs = segments.map(seg => {
     const arcLen   = (seg.kcalVal / totalK) * usable
-    const rotAngle = angle
+    const rotAngle = angle + (seg.kcalVal > 0 ? GAP_DEG / 2 : 0)
     angle += (arcLen / circ) * 360 + (seg.kcalVal > 0 ? GAP_DEG : 0)
     return { ...seg, arcLen, rotAngle }
   })
 
-  // Legend uses the same kcal total as the donut, 1 decimal place
+  // Legend uses the same kcal total as the pie, 1 decimal place
   const legend = [
     { l:'Carbs',   pct: ((cK / totalK) * 100).toFixed(1), c:'#4A90D9' },
     { l:'Protein', pct: ((pK / totalK) * 100).toFixed(1), c:'#2CB67D' },
     { l:'Fat',     pct: ((fK / totalK) * 100).toFixed(1), c:'#E05252' },
   ]
 
+  const kcal = Math.round((parseFloat(cal) || 0) * 10) / 10
+
   return (
     <div style={{display:'flex', alignItems:'center', gap:20}}>
 
-      {/* ── Donut SVG ── */}
+      {/* ── Pie SVG ── */}
       <div style={{flexShrink:0}}>
-        <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} style={{display:'block'}}>
+        <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}
+          style={{
+            display:'block',
+            transformOrigin:'center',
+            transform: revealed ? 'scale(1) rotate(0deg)' : 'scale(0.55) rotate(-22deg)',
+            opacity: revealed ? 1 : 0,
+            transition:'transform 0.7s cubic-bezier(0.34,1.56,0.64,1), opacity 0.45s ease',
+          }}>
 
-          {/* Light grey track ring */}
-          <circle cx={C} cy={C} r={R} fill="none" stroke="#EDE9F8" strokeWidth={SW}/>
+          {/* White base — shows through slice gaps as dividers */}
+          <circle cx={C} cy={C} r={R} fill="none" stroke="#fff" strokeWidth={SW}/>
 
-          {/* Coloured segments */}
+          {/* Coloured pie wedges — each sweeps in via dash-array */}
           {arcs.map((arc, i) => (
             <circle
               key={arc.label}
@@ -99,31 +109,52 @@ function ActivityRings({ pro, fat, carb, cal, revealed = false }) {
               fill="none"
               stroke={arc.color}
               strokeWidth={SW}
-              strokeLinecap="round"
+              strokeLinecap="butt"
               transform={`rotate(${arc.rotAngle} ${C} ${C})`}
               style={{
                 strokeDasharray: `${revealed ? arc.arcLen : 0} ${circ}`,
                 transition: revealed
-                  ? `stroke-dasharray 0.9s ${i * 0.18}s cubic-bezier(0.22,1,0.36,1)`
+                  ? `stroke-dasharray 0.85s ${0.25 + i * 0.16}s cubic-bezier(0.22,1,0.36,1)`
                   : 'none',
               }}
             />
           ))}
 
-          {/* Center: calorie number — defensive round-to-1-decimal so any
-              legacy FP-dust values from the DB (e.g. 283.90000000000003)
-              still display cleanly as 283.9. */}
-          <text x={C} y={C + 8} textAnchor="middle"
-            fill="#1a1a2e" fontSize="26" fontWeight="800" fontFamily="Outfit,sans-serif"
-          >{Math.round((parseFloat(cal) || 0) * 10) / 10}</text>
-          <text x={C} y={C + 24} textAnchor="middle"
-            fill="#aaa" fontSize="12" fontFamily="Outfit,sans-serif"
-          >kcal</text>
+          {/* Percentage label on each slice — placed at the wedge centroid.
+              Skips zero / very thin slices so labels never overflow. */}
+          {arcs.map(arc => {
+            if (arc.kcalVal <= 0) return null
+            const sweepDeg = (arc.arcLen / circ) * 360
+            if (sweepDeg < 16) return null
+            const midDeg = arc.rotAngle + sweepDeg / 2
+            const rad = (midDeg * Math.PI) / 180
+            const Rl = 46                       // label distance from centre
+            const x = C + Rl * Math.cos(rad)
+            const y = C + Rl * Math.sin(rad)
+            const pct = (arc.kcalVal / totalK) * 100
+            return (
+              <text key={arc.label + '-pct'}
+                x={x} y={y} textAnchor="middle" dominantBaseline="central"
+                fill="#fff" fontSize="14" fontWeight="800" fontFamily="Outfit,sans-serif"
+                style={{
+                  opacity: revealed ? 1 : 0,
+                  transition: revealed ? 'opacity 0.4s 0.95s ease' : 'none',
+                }}
+              >{pct.toFixed(1)}%</text>
+            )
+          })}
+
+          {/* Outline ring keeps the pie crisp against a white card */}
+          <circle cx={C} cy={C} r={SIZE / 2 - 1} fill="none" stroke="#F0EDF8" strokeWidth={1.5}/>
         </svg>
       </div>
 
-      {/* Legend */}
+      {/* Legend (with kcal total on top) */}
       <div style={{flex:1, display:'flex', flexDirection:'column', gap:10}}>
+        <div style={{marginBottom:2}}>
+          <span style={{fontSize:'1.35rem', fontWeight:800, color:'#1a1a2e'}}>{kcal}</span>
+          <span style={{fontSize:'0.7rem', color:'#aaa', marginLeft:4}}>kcal total</span>
+        </div>
         {legend.map(m => (
           <div key={m.l} style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
             <span style={{display:'flex', alignItems:'center', gap:7, fontSize:'0.78rem', color:'#555'}}>
@@ -216,40 +247,6 @@ function OverallScore({ rating, reviews }) {
   )
 }
 
-/* ── Macro icon SVGs ── */
-function FlameIcon({ color }) {
-  return (
-    <svg viewBox="0 0 24 24" fill={color} width="32" height="32">
-      <path d="M17.66 11.2c-.23-.3-.51-.56-.77-.82-.67-.6-1.43-1.03-2.07-1.66C13.33 7.26 13 4.85 13.95 3c-.95.23-1.78.75-2.49 1.32C8.87 6.4 7.85 10.07 9.07 13.22c.04.1.08.2.08.33 0 .22-.15.42-.35.5-.23.1-.47.04-.66-.12-.08-.05-.12-.1-.16-.17C6.87 12.33 6.69 10.28 7.45 8.64 5.78 10 4.87 12.3 5 14.47c.06.5.12 1 .29 1.5.14.6.41 1.2.71 1.73C7.08 19.43 8.95 20.67 10.96 20.92c2.14.27 4.43-.12 6.07-1.6C18.86 17.66 19.5 15 18.56 12.72l-.13-.26c-.21-.44-.77-1.26-.77-1.26z"/>
-    </svg>
-  )
-}
-function DumbbellIcon({ color }) {
-  return (
-    <svg viewBox="0 0 24 24" fill={color} width="34" height="34">
-      <rect x="1"    y="7.5" width="4"   height="9" rx="1.5"/>
-      <rect x="4"    y="9.5" width="2.5" height="5"/>
-      <rect x="6.5"  y="11"  width="11"  height="2"/>
-      <rect x="17.5" y="9.5" width="2.5" height="5"/>
-      <rect x="19"   y="7.5" width="4"   height="9" rx="1.5"/>
-    </svg>
-  )
-}
-function WheatIcon({ color }) {
-  return (
-    <svg viewBox="0 0 24 24" fill={color} width="32" height="32">
-      <path d="M8 20 Q11 13 14 6" stroke={color} strokeWidth="1.8" fill="none" strokeLinecap="round"/>
-      <ellipse cx="10.5" cy="17.5" rx="2.4" ry="1.3" transform="rotate(-55 10.5 17.5)"/>
-      <ellipse cx="8.2"  cy="16.5" rx="2.4" ry="1.3" transform="rotate(-125 8.2 16.5)"/>
-      <ellipse cx="11.2" cy="13.5" rx="2.4" ry="1.3" transform="rotate(-55 11.2 13.5)"/>
-      <ellipse cx="9"    cy="12.5" rx="2.4" ry="1.3" transform="rotate(-125 9 12.5)"/>
-      <ellipse cx="12"   cy="9.5"  rx="2.4" ry="1.3" transform="rotate(-55 12 9.5)"/>
-      <ellipse cx="9.8"  cy="8.5"  rx="2.4" ry="1.3" transform="rotate(-125 9.8 8.5)"/>
-      <ellipse cx="13"   cy="6"    rx="2"   ry="1.1" transform="rotate(-90 13 6)"/>
-    </svg>
-  )
-}
-
 export default function DetailPage() {
   const { productId } = useParams()
   const nav           = useNavigate()
@@ -275,24 +272,17 @@ export default function DetailPage() {
   const [loading,     setLoading]     = useState(!initialProd)
   const [modal,       setModal]       = useState(false)
   const [toast,       setToast]       = useState('')
-  const [macrosRevealed, setMacrosRevealed] = useState(false)
   const [chartIn,        setChartIn]        = useState(false)
   const [imgLoaded,      setImgLoaded]      = useState(!!fromCarousel) // skip fade when from carousel (already preloaded)
 
   const scrollRef   = useRef(null)
   const leavingRef  = useRef(false)
 
-  /* ── 5-second macro reveal ── */
   /* ── scroll to top whenever the product changes ── */
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0
     window.scrollTo({ top: 0, behavior: 'instant' })
   }, [productId])
-
-  useEffect(() => {
-    const t = setTimeout(() => setMacrosRevealed(true), 3000)
-    return () => clearTimeout(t)
-  }, [])
 
   /* ── chart draw-in after short delay ── */
   useEffect(() => {
@@ -352,6 +342,9 @@ export default function DetailPage() {
 
   const p = product
   const allRevs = [...reviews,...(Array.isArray(p.revs)?p.revs:[])]
+
+  /* Round a macro value to 1 decimal for clean display; em-dash when absent. */
+  const fmt = (v) => (v == null || v === '') ? '—' : Math.round((parseFloat(v) || 0) * 10) / 10
 
   return (
     <>
@@ -488,81 +481,53 @@ export default function DetailPage() {
           )}
         </div>
 
-        {/* ══ MACRO ROW ══ */}
-        <div style={{display:'flex',gap:8,padding:'14px 16px 0',animation:contentAnim('fadeUp',0.28)}}>
-          {[
-            {val:p.cal,  unit:'kcal', label:'CALORIES', line:'#F59E0B', accent:'#FFF7E6', color:'#F59E0B', icon:<FlameIcon    color="#F59E0B"/>, delay:0},
-            {val:p.pro,  unit:'g',    label:'PROTEIN',  line:'#2CB67D', accent:'#EDFAF4', color:'#2CB67D', icon:<DumbbellIcon color="#2CB67D"/>, delay:120},
-            {val:p.carb, unit:'g',    label:'CARBS',    line:'#4A90D9', accent:'#EEF4FF', color:'#4A90D9', icon:<WheatIcon    color="#4A90D9"/>, delay:240},
-          ].map(m=>(
-            /* ── Flip card container ── */
-            <div key={m.label} style={{ flex:1, height:86, perspective:'600px' }}>
-              {/* Flipper — rotates on reveal */}
-              <div style={{
-                position:'relative', width:'100%', height:'100%',
-                transformStyle:'preserve-3d',
-                transition: macrosRevealed
-                  ? `transform 0.65s ${m.delay}ms cubic-bezier(0.4,0,0.2,1)`
-                  : 'none',
-                transform: macrosRevealed ? 'rotateY(180deg)' : 'rotateY(0deg)',
+        {/* ══ MACRO STATS — Calories card + 2×2 grid ══ */}
+        <div style={{padding:'14px 16px 0',animation:contentAnim('fadeUp',0.28)}}>
+          {/* Calories — full width */}
+          <div style={{
+            background:'#fff', borderRadius:16, padding:'18px 20px',
+            display:'flex', alignItems:'center', justifyContent:'space-between',
+            boxShadow:'0 1px 6px rgba(0,0,0,0.05)', marginBottom:10, position:'relative', overflow:'hidden',
+          }}>
+            <span style={{fontSize:'1.2rem',fontWeight:800,letterSpacing:'2px',color:'#9C97AD',textTransform:'uppercase'}}>Calories</span>
+            <span>
+              <span style={{fontSize:'1.75rem',fontWeight:800,color:'#1a1a2e'}}>{fmt(p.cal)}</span>
+              <span style={{fontSize:'0.72rem',color:'#bbb',marginLeft:4}}>kcal</span>
+            </span>
+            <div style={{position:'absolute',bottom:0,left:0,right:0,height:3,background:'#F59E0B'}}/>
+          </div>
+          {/* Protein / Carbs / Fat / Fibre */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            {[
+              {label:'Protein', val:p.pro,   line:'#2CB67D'},
+              {label:'Carbs',   val:p.carb,  line:'#4A90D9'},
+              {label:'Fat',     val:p.fat,   line:'#E05252'},
+              {label:'Fibre',   val:p.fibre, line:'#C8A24A'},
+            ].map(m=>(
+              <div key={m.label} style={{
+                background:'#fff', borderRadius:14, padding:'16px 14px 18px',
+                textAlign:'center', boxShadow:'0 1px 6px rgba(0,0,0,0.05)',
+                position:'relative', overflow:'hidden',
               }}>
-
-                {/* ── FRONT: icon face ── */}
-                <div style={{
-                  position:'absolute', inset:0,
-                  backfaceVisibility:'hidden', WebkitBackfaceVisibility:'hidden',
-                  background: m.accent, borderRadius:14,
-                  boxShadow:'0 1px 6px rgba(0,0,0,0.05)',
-                  display:'flex', flexDirection:'column',
-                  alignItems:'center', justifyContent:'center',
-                  gap:5, overflow:'hidden',
-                }}>
-                  {/* Shine sweep */}
-                  <div style={{
-                    position:'absolute', top:0, left:0,
-                    width:'55%', height:'100%',
-                    background:'linear-gradient(105deg,transparent 35%,rgba(255,255,255,0.75) 50%,transparent 65%)',
-                    animation:'macroShine 2.4s ease-in-out infinite',
-                    pointerEvents:'none',
-                  }}/>
-                  {m.icon}
-                  <div style={{fontSize:'0.5rem',fontWeight:800,letterSpacing:'1.5px',color:m.color,textTransform:'uppercase'}}>
-                    {m.label}
-                  </div>
+                <div style={{fontSize:'0.58rem',fontWeight:800,letterSpacing:'1.5px',color:'#9C97AD',textTransform:'uppercase',marginBottom:6}}>{m.label}</div>
+                <div>
+                  <span style={{fontSize:'1.45rem',fontWeight:800,color:'#1a1a2e'}}>{fmt(m.val)}</span>
+                  <span style={{fontSize:'0.66rem',color:'#bbb',marginLeft:3}}>g</span>
                 </div>
-
-                {/* ── BACK: value face ── */}
-                <div style={{
-                  position:'absolute', inset:0,
-                  backfaceVisibility:'hidden', WebkitBackfaceVisibility:'hidden',
-                  transform:'rotateY(180deg)',
-                  background:'#fff', borderRadius:14,
-                  boxShadow:'0 1px 6px rgba(0,0,0,0.05)',
-                  display:'flex', flexDirection:'column',
-                  alignItems:'center', justifyContent:'center',
-                  padding:'10px 8px 0', textAlign:'center',
-                }}>
-                  <div>
-                    <span style={{fontSize:'1.4rem',fontWeight:700,color:'#1a1a2e'}}>{m.val??'—'}</span>
-                    <span style={{fontSize:'0.68rem',color:'#bbb',marginLeft:2}}>{m.unit}</span>
-                  </div>
-                  <div style={{fontSize:'0.58rem',fontWeight:700,letterSpacing:'1px',color:'#bbb',marginTop:3,marginBottom:'auto'}}>{m.label}</div>
-                  <div style={{height:3,borderRadius:'2px 2px 0 0',background:m.line,width:'100%',marginTop:8}}/>
-                </div>
-
+                <div style={{position:'absolute',bottom:0,left:0,right:0,height:3,background:m.line}}/>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
 
         {/* ══ CALORIE BREAKDOWN ══ */}
         <div style={{margin:'12px 16px 0',background:'#fff',borderRadius:16,padding:'16px 18px',boxShadow:'0 1px 6px rgba(0,0,0,0.05)',animation:contentAnim('fadeUp',0.34)}}>
           <div style={{fontSize:'0.68rem',fontWeight:700,letterSpacing:'1.5px',textTransform:'uppercase',color:'#aaa',marginBottom:14}}>Calorie Breakdown</div>
-          <ActivityRings pro={p.pro} fat={p.fat} carb={p.carb} cal={p.cal} revealed={chartIn}/>
+          <MacroPie pro={p.pro} fat={p.fat} carb={p.carb} cal={p.cal} revealed={chartIn}/>
         </div>
 
         {/* ══ NUTRITION FACTS ══ */}
-        {(p.nutrition||[]).length>0 && (
+        {p.nutrition_visible !== false && (p.nutrition||[]).length>0 && (
           <div style={{margin:'12px 16px 0',background:'#fff',borderRadius:16,padding:'16px 18px',boxShadow:'0 1px 6px rgba(0,0,0,0.05)',animation:contentAnim('fadeUp',0.4)}}>
             <div style={{fontSize:'0.68rem',fontWeight:700,letterSpacing:'1.5px',textTransform:'uppercase',color:'#aaa',marginBottom:14}}>Nutrition Facts · Per Serving</div>
             {(p.nutrition||[]).map((n,i)=>(
@@ -695,21 +660,37 @@ export default function DetailPage() {
                 </div>
               </div>
 
-              {/* Stats row */}
-              <div style={{ background:'#fff', borderRadius:16, overflow:'hidden', boxShadow:'0 1px 8px rgba(76,29,149,0.08)', display:'grid', gridTemplateColumns:'1fr 1fr 1fr' }}>
-                {[
-                  { val:p.cal,  unit:'kcal', label:'Calories' },
-                  { val:p.pro,  unit:'g',    label:'Protein'  },
-                  { val:p.carb, unit:'g',    label:'Carbs'    },
-                ].map((m,i) => (
-                  <div key={m.label} style={{ padding:'20px 12px', textAlign:'center', borderRight: i < 2 ? '1px solid #EDE8F8' : 'none' }}>
-                    <div>
-                      <span style={{ fontSize:'1.65rem', fontWeight:800, color:'#1a1a2e' }}>{m.val??'—'}</span>
-                      <span style={{ fontSize:'0.66rem', color:'#bbb', marginLeft:3 }}>{m.unit}</span>
+              {/* Stats — Calories card + 2×2 grid */}
+              <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                <div style={{
+                  background:'#fff', borderRadius:16, padding:'18px 22px',
+                  display:'flex', alignItems:'center', justifyContent:'space-between',
+                  boxShadow:'0 1px 8px rgba(76,29,149,0.08)', position:'relative', overflow:'hidden',
+                }}>
+                  <span style={{ fontSize:'1.2rem', fontWeight:800, letterSpacing:'2px', color:'#9C97AD', textTransform:'uppercase' }}>Calories</span>
+                  <span>
+                    <span style={{ fontSize:'1.75rem', fontWeight:800, color:'#1a1a2e' }}>{fmt(p.cal)}</span>
+                    <span style={{ fontSize:'0.7rem', color:'#bbb', marginLeft:4 }}>kcal</span>
+                  </span>
+                  <div style={{ position:'absolute', bottom:0, left:0, right:0, height:3, background:'#F59E0B' }}/>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                  {[
+                    { val:p.pro,   line:'#2CB67D', label:'Protein' },
+                    { val:p.carb,  line:'#4A90D9', label:'Carbs'   },
+                    { val:p.fat,   line:'#E05252', label:'Fat'     },
+                    { val:p.fibre, line:'#C8A24A', label:'Fibre'   },
+                  ].map(m => (
+                    <div key={m.label} style={{ background:'#fff', borderRadius:14, padding:'16px 14px 18px', textAlign:'center', boxShadow:'0 1px 8px rgba(76,29,149,0.08)', position:'relative', overflow:'hidden' }}>
+                      <div style={{ fontSize:'0.58rem', fontWeight:800, letterSpacing:'1.5px', color:'#9C97AD', textTransform:'uppercase', marginBottom:6 }}>{m.label}</div>
+                      <div>
+                        <span style={{ fontSize:'1.5rem', fontWeight:800, color:'#1a1a2e' }}>{fmt(m.val)}</span>
+                        <span style={{ fontSize:'0.66rem', color:'#bbb', marginLeft:3 }}>g</span>
+                      </div>
+                      <div style={{ position:'absolute', bottom:0, left:0, right:0, height:3, background:m.line }}/>
                     </div>
-                    <div style={{ fontSize:'0.7rem', color:'#aaa', marginTop:4 }}>{m.label}</div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
 
               {/* Buttons — below stats */}
@@ -755,11 +736,11 @@ export default function DetailPage() {
               {/* Calorie Breakdown */}
               <div style={{ background:'#fff', borderRadius:16, padding:'20px 22px', boxShadow:'0 1px 8px rgba(76,29,149,0.07)' }}>
                 <div style={{ fontSize:'0.63rem', fontWeight:700, letterSpacing:'1.5px', textTransform:'uppercase', color:'#C4B5FD', marginBottom:16 }}>Calorie Breakdown</div>
-                <ActivityRings pro={p.pro} fat={p.fat} carb={p.carb} cal={p.cal} revealed={chartIn}/>
+                <MacroPie pro={p.pro} fat={p.fat} carb={p.carb} cal={p.cal} revealed={chartIn}/>
               </div>
 
               {/* Nutrition Facts */}
-              {(p.nutrition||[]).length > 0 && (
+              {p.nutrition_visible !== false && (p.nutrition||[]).length > 0 && (
                 <div style={{ background:'#fff', borderRadius:16, padding:'20px 22px', boxShadow:'0 1px 8px rgba(76,29,149,0.07)' }}>
                   <div style={{ fontSize:'0.63rem', fontWeight:700, letterSpacing:'1.5px', textTransform:'uppercase', color:'#C4B5FD', marginBottom:16 }}>Nutrition Facts · Per Serving</div>
                   {(p.nutrition||[]).map((n,i) => (

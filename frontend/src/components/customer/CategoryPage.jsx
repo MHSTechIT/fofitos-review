@@ -166,25 +166,31 @@ function FloatingVideo({ url, onExpandedChange }) {
         />
       )}
 
-      {/* Bottom strip — covers YouTube's share / watch-later / logo overlay.
-          Percentage-based so it scales between mini and expanded modes. */}
-      <div style={{
-        position:'absolute', left:0, right:0, bottom:0, height:'15%',
-        background:'#000', pointerEvents:'none', zIndex:1,
-      }}/>
+      {/* YouTube/Drive chrome masks — only for embeds. A natively uploaded
+          video has no chrome to hide, so these strips would just letterbox it. */}
+      {embedSrc && (
+        <>
+          {/* Bottom strip — covers YouTube's share / watch-later / logo overlay.
+              Percentage-based so it scales between mini and expanded modes. */}
+          <div style={{
+            position:'absolute', left:0, right:0, bottom:0, height:'15%',
+            background:'#000', pointerEvents:'none', zIndex:1,
+          }}/>
 
-      {/* Top strip — hides YouTube's title/channel overlay (avatar, channel name, title) */}
-      <div style={{
-        position:'absolute', left:0, right:0, top:0, height:'34%',
-        background:'linear-gradient(180deg, rgba(0,0,0,1) 78%, rgba(0,0,0,0) 100%)',
-        pointerEvents:'none', zIndex:1,
-      }}/>
+          {/* Top strip — hides YouTube's title/channel overlay (avatar, channel name, title) */}
+          <div style={{
+            position:'absolute', left:0, right:0, top:0, height:'34%',
+            background:'linear-gradient(180deg, rgba(0,0,0,1) 78%, rgba(0,0,0,0) 100%)',
+            pointerEvents:'none', zIndex:1,
+          }}/>
 
-      {/* Center click-blocker — prevents YouTube's hover overlay (play/pause, prev/next) from appearing */}
-      <div style={{
-        position:'absolute', left:0, right:0, top:'34%', bottom:'15%',
-        background:'transparent', zIndex:1,
-      }}/>
+          {/* Center click-blocker — prevents YouTube's hover overlay (play/pause, prev/next) from appearing */}
+          <div style={{
+            position:'absolute', left:0, right:0, top:'34%', bottom:'15%',
+            background:'transparent', zIndex:1,
+          }}/>
+        </>
+      )}
 
       {/* Expand button (top-left) — desktop: toggle tall side panel; mobile: native fullscreen */}
       <button

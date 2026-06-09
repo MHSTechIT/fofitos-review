@@ -12,8 +12,8 @@ function emptyProduct() {
     cat: '', name: '', img: '', tagline: '', price: '',
     rating: 4.0, reviews: 0,
     is_veg: true,
-    cal: 0, pro: 0, carb: 0, fat: 0,
-    tags: [], nutrition: [], ingr: [],
+    cal: 0, pro: 0, carb: 0, fat: 0, fibre: 0,
+    tags: [], nutrition: [], nutrition_visible: true, ingr: [],
   }
 }
 
@@ -404,9 +404,11 @@ export default function ProductsPage() {
       pro:  r1(data.pro),
       carb: r1(data.carb),
       fat:  r1(data.fat),
+      fibre: r1(data.fibre),
       is_veg: data.is_veg !== false,
       tags: Array.isArray(data.tags) ? data.tags : [],
       nutrition: Array.isArray(data.nutrition) ? data.nutrition : [],
+      nutrition_visible: data.nutrition_visible !== false,
       ingr: Array.isArray(data.ingr) ? data.ingr : [],
     })
     // If saved cal matches 4-4-9 of the saved macros, stay in auto mode so
@@ -433,7 +435,10 @@ export default function ProductsPage() {
       is_veg: form.is_veg !== false,
       cal: round1(form.cal), pro: round1(form.pro),
       carb: round1(form.carb), fat: round1(form.fat),
-      tags: form.tags, nutrition: form.nutrition, ingr: form.ingr,
+      fibre: round1(form.fibre),
+      tags: form.tags, nutrition: form.nutrition,
+      nutrition_visible: form.nutrition_visible !== false,
+      ingr: form.ingr,
       done_by: doneBy,
     }
     let result
@@ -634,7 +639,7 @@ export default function ProductsPage() {
 
               <div className="form-section">Macros</div>
               <div className="form-grid">
-                {[['cal','Calories (kcal)'],['pro','Protein (g)'],['carb','Carbs (g)'],['fat','Fat (g)']].map(([k, label]) => (
+                {[['cal','Calories (kcal)'],['pro','Protein (g)'],['carb','Carbs (g)'],['fat','Fat (g)'],['fibre','Fibre (g)']].map(([k, label]) => (
                   <div key={k} className="form-group">
                     <label className="f-label">{label}</label>
                     <input className="f-input" type="number" step="any" min="0" value={form[k]} onChange={e => setMacro(k, e.target.value)} onBlur={macroBlur(k)} />
@@ -652,7 +657,18 @@ export default function ProductsPage() {
               <div className="form-section">Tags</div>
               <TagInput tags={form.tags} onChange={v => set('tags', v)} />
 
-              <div className="form-section">Nutrition Facts</div>
+              <div className="form-section" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <span>Nutrition Facts</span>
+                <StatusToggle
+                  on={form.nutrition_visible !== false}
+                  onClick={() => set('nutrition_visible', form.nutrition_visible === false)}
+                />
+              </div>
+              {form.nutrition_visible === false && (
+                <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginBottom: 8, marginTop: -4 }}>
+                  Hidden — this card won’t show on the product page.
+                </div>
+              )}
               <NutritionEditor rows={form.nutrition} onChange={v => set('nutrition', v)} />
 
               <div className="form-section">Ingredients</div>

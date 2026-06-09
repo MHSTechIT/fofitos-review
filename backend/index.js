@@ -22,7 +22,7 @@ const ALLOWED_TABLES = new Set(['categories', 'products', 'reviews', 'qr_links',
 // Whitelist of columns per table — used to filter unknown keys in incoming JSON
 const TABLE_COLUMNS = {
   categories: ['id','name','description','img','sort_order','video_url','group_name','active'],
-  products:   ['id','cat','name','img','tagline','price','rating','reviews','tags','cal','pro','carb','fat','nutrition','ingr','revs','bg_color','arch_color','sort_order','is_veg','created_at','updated_at','done_by','active'],
+  products:   ['id','cat','name','img','tagline','price','rating','reviews','tags','cal','pro','carb','fat','fibre','nutrition','nutrition_visible','ingr','revs','bg_color','arch_color','sort_order','is_veg','created_at','updated_at','done_by','active'],
   reviews:    ['id','product_id','name','rating','text','verified','created_at','phone','visible'],
   qr_links:   ['id','url','label'],
   links:      ['id','zomato_url','swiggy_url','review_url','footer_company','footer_fssai','footer_gst','footer_phone1','footer_phone2','footer_email','media_images','media_videos'],
@@ -158,14 +158,99 @@ const upload = multer({
       cb(null, `${Date.now()}_${safe}`)
     },
   }),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  // Images stay small; videos (uploaded by admin and played natively on the
+  // customer pages) need much more headroom.
+  limits: { fileSize: 200 * 1024 * 1024 },
 })
 
-app.post('/api/upload', upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file' })
-  // Relative URL — works on any host without baking in a base URL
-  const url = `/api/uploads/${req.file.filename}`
-  res.json({ data: { url, filename: req.file.filename, size: req.file.size } })
+app.post('/api/upload', (req, res) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      const tooBig = err.code === 'LIMIT_FILE_SIZE'
+      return res.status(tooBig ? 413 : 400).json({
+        error: tooBig ? 'File too large (max 200 MB)' : (err.message || 'Upload failed'),
+      })
+    }
+    if (!req.file) return res.status(400).json({ error: 'No file' })
+    // Relative URL — works on any host without baking in a base URL
+    const url = `/api/uploads/${req.file.filename}`
+    res.json({ data: { url, filename: req.file.filename, size: req.file.size } })
+  })
+})
+
+// --- Storage cleanup: delete orphaned upload files (never referenced in the DB) ---
+// Without this, replacing or deleting a video/image leaves the old file on disk
+// forever — with 200 MB videos that grows unbounded and can fill the disk.
+//
+// SAFETY (this NEVER touches anything a printed QR code depends on):
+//   • QR codes encode /go/N and resolve via the qr_links table — they are never
+//     stored as upload files, so a sweep of /uploads cannot remove a QR image.
+//   • The protected set is built by scanning EVERY row of EVERY table, including
+//     qr_links — so any file a QR *destination* points to is referenced and kept.
+//   • If ANY table read fails, the sweep aborts and deletes NOTHING (so a momentary
+//     DB hiccup can never be mistaken for "nothing is referenced").
+//   • Only files older than graceHours (default 24h) are eligible — protects
+//     in-flight uploads that haven't been saved to a row yet.
+//   • Dry-run by default. Pass ?confirm=1 to actually delete.
+const UPLOAD_REF_RE = /\/(?:api\/)?uploads\/([^\s"'?#)\\]+)/g
+
+async function collectReferencedFilenames() {
+  const referenced = new Set()
+  for (const table of ALLOWED_TABLES) {
+    // Throws on failure → caller aborts without deleting anything.
+    const r = await query(`SELECT * FROM public."${table}"`)
+    for (const row of r.rows) {
+      const json = JSON.stringify(row)
+      let m
+      while ((m = UPLOAD_REF_RE.exec(json)) !== null) {
+        try { referenced.add(decodeURIComponent(m[1])) } catch { referenced.add(m[1]) }
+      }
+    }
+  }
+  return referenced
+}
+
+app.post('/api/uploads/cleanup', async (req, res) => {
+  const confirm = req.query.confirm === '1' || req.body?.confirm === true
+  const graceHours = Math.max(0, parseFloat(req.query.graceHours ?? req.body?.graceHours ?? '24'))
+  const GRACE_MS = graceHours * 3600 * 1000
+  try {
+    const referenced = await collectReferencedFilenames()   // aborts on DB error
+    const files = await fs.promises.readdir(UPLOADS_DIR)
+    const now = Date.now()
+    const orphans = []
+    let protectedInGrace = 0
+    for (const name of files) {
+      if (referenced.has(name)) continue                     // referenced (incl. QR) → keep
+      const full = path.join(UPLOADS_DIR, name)
+      let stat
+      try { stat = await fs.promises.stat(full) } catch { continue }
+      if (!stat.isFile()) continue
+      if (now - stat.mtimeMs < GRACE_MS) { protectedInGrace++; continue }
+      orphans.push({ name, sizeBytes: stat.size, ageHours: +((now - stat.mtimeMs) / 3600000).toFixed(1) })
+    }
+    const deleted = []
+    if (confirm) {
+      for (const o of orphans) {
+        try { await fs.promises.unlink(path.join(UPLOADS_DIR, o.name)); deleted.push(o.name) }
+        catch (e) { o.error = e.message }
+      }
+    }
+    res.json({ data: {
+      mode: confirm ? 'deleted' : 'dry-run',
+      totalFiles: files.length,
+      referencedCount: referenced.size,
+      protectedInGrace,
+      graceHours,
+      orphanCount: orphans.length,
+      orphanBytes: orphans.reduce((a, b) => a + b.sizeBytes, 0),
+      orphans,
+      deleted,
+    }})
+  } catch (e) {
+    // Could not confirm references → delete NOTHING.
+    res.status(500).json({ error: `Cleanup aborted, no files deleted: ${e.message}` })
+  }
 })
 
 // --- Admin auth (per-department passwords in the admin_auth table) ---

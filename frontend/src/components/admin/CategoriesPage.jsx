@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { sb } from '../../lib/supabase'
 import ImageUpload from './ImageUpload'
+import VideoUpload from './VideoUpload'
 import StatusToggle from './StatusToggle'
 
 const EMPTY_CAT = { id: '', name: '', description: '', img: '', video_url: '', sort_order: 0, group_name: '' }
@@ -315,13 +316,8 @@ export default function CategoriesPage() {
                   <ImageUpload value={form.img} onChange={v => set('img', v)} />
                 </div>
                 <div className="form-group full">
-                  <label className="f-label">Video URL <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(optional — share URL: YouTube or Google Drive)</span></label>
-                  <input
-                    className="f-input"
-                    value={form.video_url || ''}
-                    onChange={e => set('video_url', e.target.value)}
-                    placeholder="https://youtube.com/watch?v=… or any video share URL"
-                  />
+                  <label className="f-label">Category Video <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(optional — upload a file to play it directly, or paste a YouTube / Drive link)</span></label>
+                  <VideoUpload value={form.video_url} onChange={v => set('video_url', v)} />
                 </div>
               </div>
             </div>

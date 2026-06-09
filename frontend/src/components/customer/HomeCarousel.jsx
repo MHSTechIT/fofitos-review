@@ -3,53 +3,19 @@ import { useEffect, useState, useRef } from 'react'
 const INTERVAL_MS = 5000   // 5 s per slide
 const TRANSITION  = 600    // crossfade in ms
 
-/* ── helpers to detect video provider ── */
+/* ── Videos play natively from the database (uploaded by admin) only. ──
+   These detectors exist solely to SKIP any legacy YouTube/Drive links so no
+   external player or its chrome can ever appear. */
 function isYouTube(url) { return url && (url.includes('youtube.com') || url.includes('youtu.be')) }
 function isDrive(url)   { return url && url.includes('drive.google.com') }
 
-function youtubeId(url) {
-  try {
-    const u = new URL(url)
-    if (u.hostname.includes('youtu.be')) return u.pathname.replace(/^\//, '')
-    if (u.hostname.includes('youtube.com')) {
-      return u.searchParams.get('v') || u.pathname.match(/\/embed\/([^/?]+)/)?.[1]
-    }
-  } catch {}
-  return null
-}
-
-function youtubeEmbed(url, autoplay) {
-  // No loop=/playlist= here — a playlist makes YouTube render prev/next buttons
-  // in its chrome. Looping is handled in JS via the ENDED state event instead.
-  const base = `autoplay=${autoplay ? 1 : 0}&mute=1&playsinline=1&controls=0&modestbranding=1&rel=0&iv_load_policy=3&fs=0&disablekb=1&enablejsapi=1`
-  const id = youtubeId(url)
-  if (id) return `https://www.youtube.com/embed/${id}?${base}`
-  return null
-}
-function youtubeThumb(url) {
-  const id = youtubeId(url)
-  return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : null
-}
-
-function driveEmbed(url, autoplay) {
-  try {
-    const u = new URL(url)
-    const m = u.pathname.match(/\/file\/d\/([^/]+)/)
-    const id = m ? m[1] : u.searchParams.get('id')
-    if (id) return `https://drive.google.com/file/d/${id}/preview${autoplay ? '?autoplay=1' : ''}`
-  } catch {}
-  return null
-}
-
 /* ── Single slide that lazily renders the video iframe once "play" is tapped ── */
 function VideoSlide({ url, autoplay, isActive, onFullscreenChange }) {
-  // When autoplay is true we render the iframe immediately.
-  // When autoplay is false we show a thumbnail + play button; clicking play swaps to the iframe.
+  // Videos are uploaded by admin and played natively from the database.
+  // autoplay=true → plays immediately; autoplay=false → first frame + play button.
   const [playing,    setPlaying]    = useState(autoplay)
   const [muted,      setMuted]      = useState(true)
   const [fullscreen, setFullscreen] = useState(false)
-  const [cover,      setCover]      = useState(true)    // masks YouTube's own chrome
-  const iframeRef = useRef(null)
   const videoRef  = useRef(null)
 
   // Let the carousel pause auto-advance while a video is fullscreen
@@ -66,51 +32,10 @@ function VideoSlide({ url, autoplay, isActive, onFullscreenChange }) {
   // If admin toggles autoplay later, react to the new prop
   useEffect(() => { setPlaying(autoplay) }, [autoplay])
 
-  // When the iframe (re)starts — or the user toggles fullscreen — YouTube
-  // flashes its own chrome for a few seconds. Keep an opaque cover over the
-  // player until that auto-hides, so only a clean video is ever shown.
-  useEffect(() => {
-    if (!playing) { setCover(true); return }
-    setCover(true)
-    const t = setTimeout(() => setCover(false), 3800)
-    return () => clearTimeout(t)
-  }, [playing, fullscreen])
-
-  // Loop the video without YouTube's loop=/playlist= trick (a playlist makes
-  // the player show prev/next buttons). Listen for the ENDED state and replay.
-  useEffect(() => {
-    if (!playing || !isYouTube(url)) return
-    const iframe = iframeRef.current
-    if (!iframe) return
-    const ping = () => iframe.contentWindow?.postMessage('{"event":"listening"}', '*')
-    const onMessage = (e) => {
-      if (e.source !== iframe.contentWindow) return
-      let d; try { d = JSON.parse(e.data) } catch { return }
-      if (d?.event === 'onStateChange' && d.info === 0) {
-        iframe.contentWindow?.postMessage('{"event":"command","func":"playVideo","args":[]}', '*')
-      }
-    }
-    window.addEventListener('message', onMessage)
-    iframe.addEventListener('load', ping)
-    ping()
-    const t1 = setTimeout(ping, 1000)
-    const t2 = setTimeout(ping, 2500)
-    return () => {
-      window.removeEventListener('message', onMessage)
-      iframe.removeEventListener('load', ping)
-      clearTimeout(t1); clearTimeout(t2)
-    }
-  }, [playing, url])
-
   // When this slide is no longer the active one, mute it so the previous
   // slide's audio goes silent as the carousel crossfades to the next.
   useEffect(() => {
     if (isActive) return
-    if (iframeRef.current?.contentWindow) {
-      iframeRef.current.contentWindow.postMessage(
-        JSON.stringify({ event:'command', func:'mute', args:[] }), '*'
-      )
-    }
     if (videoRef.current) videoRef.current.muted = true
     setMuted(true)
   }, [isActive])
@@ -118,34 +43,19 @@ function VideoSlide({ url, autoplay, isActive, onFullscreenChange }) {
   function toggleMute() {
     const next = !muted
     setMuted(next)
-    // For YouTube iframes, send postMessage command
-    if (iframeRef.current?.contentWindow) {
-      iframeRef.current.contentWindow.postMessage(
-        JSON.stringify({ event:'command', func: next ? 'mute' : 'unMute', args: [] }),
-        '*'
-      )
-    }
-    // For native <video>
     if (videoRef.current) videoRef.current.muted = next
   }
 
-  // CSS-based fullscreen toggle — keeps our own overlays (click-blocker + cover)
-  // so YouTube's native chrome never shows. Press again to return to normal size.
+  // CSS-based fullscreen toggle. Press again to return to normal size.
   function toggleFullscreen() {
     setFullscreen(f => !f)
   }
 
   if (!playing) {
-    // ── Thumbnail + play overlay ──
-    const thumb = isYouTube(url) ? youtubeThumb(url) : null
+    // ── First frame of the uploaded video + play overlay ──
     return (
       <div className="hc-thumb-wrap" onClick={() => setPlaying(true)}>
-        {thumb ? (
-          <img src={thumb} alt="" className="hc-img"/>
-        ) : (
-          // Non-YouTube source — show a dark placeholder
-          <div className="hc-img" style={{ background:'#111' }}/>
-        )}
+        <video src={url} className="hc-img" muted playsInline preload="metadata"/>
         <button className="hc-play" aria-label="Play video" onClick={(e) => { e.stopPropagation(); setPlaying(true) }}>
           <svg viewBox="0 0 24 24" width="34" height="34" fill="#fff">
             <path d="M8 5v14l11-7z"/>
@@ -155,47 +65,10 @@ function VideoSlide({ url, autoplay, isActive, onFullscreenChange }) {
     )
   }
 
-  // ── Playing — render iframe/video with overlays that hide YouTube chrome ──
-  let frame
-  if (isYouTube(url)) {
-    frame = (
-      <iframe
-        ref={iframeRef}
-        src={youtubeEmbed(url, true)}
-        className="hc-video"
-        allow="autoplay; encrypted-media; picture-in-picture"
-        allowFullScreen
-        title="Promo video"
-      />
-    )
-  } else if (isDrive(url)) {
-    frame = (
-      <iframe
-        ref={iframeRef}
-        src={driveEmbed(url, true)}
-        className="hc-video"
-        allow="autoplay"
-        allowFullScreen
-        title="Promo video"
-      />
-    )
-  } else {
-    frame = <video ref={videoRef} src={url} autoPlay muted={muted} loop playsInline className="hc-video"/>
-  }
-
+  // ── Playing — native video straight from the database, no external chrome ──
   return (
     <div className={`hc-vwrap${fullscreen ? ' is-fs' : ''}`}>
-      {frame}
-
-      {/* Click-blocker — stops YouTube hover overlay (prev/play/next) appearing */}
-      <div className="hc-click-blocker"/>
-
-      {/* Opaque cover — masks YouTube's title-card / channel / paused chrome */}
-      <div className={`hc-cover${cover ? '' : ' is-hidden'}`} aria-hidden="true">
-        {isYouTube(url) && youtubeThumb(url) && (
-          <img src={youtubeThumb(url)} alt="" className="hc-img"/>
-        )}
-      </div>
+      <video ref={videoRef} src={url} autoPlay muted={muted} loop playsInline className="hc-video"/>
 
       {/* Fullscreen toggle (top-left) — expand to fill screen / shrink back */}
       <button
@@ -250,11 +123,13 @@ export default function HomeCarousel({ images = [], videos = [] }) {
     .map(im => typeof im === 'string' ? { url: im, link: '' } : { url: im?.url || '', link: im?.link || '' })
     .filter(im => im.url)
 
-  // Normalise videos to {url, autoplay} shape
+  // Normalise videos to {url, autoplay} shape. Only database-hosted (uploaded)
+  // videos are shown — any legacy YouTube/Drive links are skipped so no external
+  // player ever appears. Replace them by uploading a file in Admin → Links.
   const normVideos = videos
     .filter(Boolean)
     .map(v => typeof v === 'string' ? { url: v, autoplay: true } : { url: v?.url || '', autoplay: v?.autoplay !== false })
-    .filter(v => v.url)
+    .filter(v => v.url && !isYouTube(v.url) && !isDrive(v.url))
 
   const slides = [
     ...normImages.map(im => ({ kind: 'image', url: im.url, link: im.link })),

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { sb } from '../../lib/supabase'
 import ImageUpload from './ImageUpload'
+import VideoUpload from './VideoUpload'
 
 const ROW_ID = 'default'
 const EMPTY = {
@@ -217,16 +218,10 @@ export default function LinksPage() {
                     )}
                     {(form.media_videos || []).map((v, i) => (
                       <div key={i} style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:10, padding:10, border:'1px solid var(--border)', borderRadius:10, background:'#FAF9FE' }}>
-                        <div style={{ display:'flex', gap:8 }}>
-                          <input
-                            className="f-input"
-                            value={v.url}
-                            onChange={e => updateVideoUrl(i, e.target.value)}
-                            placeholder="https://youtube.com/... or video URL"
-                            style={{ flex:1 }}
-                          />
+                        <div style={{ display:'flex', justifyContent:'flex-end' }}>
                           <button onClick={() => removeVideo(i)} style={{ width:38, height:38, borderRadius:8, border:'1px solid var(--border)', background:'#fff', color:'var(--danger)', fontSize:'1rem', cursor:'pointer', flexShrink:0 }}>×</button>
                         </div>
+                        <VideoUpload value={v.url} onChange={url => updateVideoUrl(i, url)} />
                         {/* Autoplay toggle */}
                         <label style={{ display:'flex', alignItems:'center', gap:8, fontSize:'0.75rem', color:'var(--muted)', cursor:'pointer', userSelect:'none' }}>
                           <input
