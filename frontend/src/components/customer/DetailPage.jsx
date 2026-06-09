@@ -57,7 +57,7 @@ function MacroPie({ pro, fat, carb, cal, revealed = false }) {
   const segments = [
     { label:'Carbs',   kcalVal: cK, color:'#4A90D9' },
     { label:'Protein', kcalVal: pK, color:'#2CB67D' },
-    { label:'Fat',     kcalVal: fK, color:'#E05252' },
+    { label:'Good Fat', kcalVal: fK, color:'#D4A017' },
   ]
 
   // Thin white divider between slices. Only contributing segments take a gap.
@@ -79,7 +79,7 @@ function MacroPie({ pro, fat, carb, cal, revealed = false }) {
   const legend = [
     { l:'Carbs',   pct: ((cK / totalK) * 100).toFixed(1), c:'#4A90D9' },
     { l:'Protein', pct: ((pK / totalK) * 100).toFixed(1), c:'#2CB67D' },
-    { l:'Fat',     pct: ((fK / totalK) * 100).toFixed(1), c:'#E05252' },
+    { l:'Good Fat', pct: ((fK / totalK) * 100).toFixed(1), c:'#D4A017' },
   ]
 
   const kcal = Math.round((parseFloat(cal) || 0) * 10) / 10
@@ -501,7 +501,7 @@ export default function DetailPage() {
             {[
               {label:'Protein', val:p.pro,   line:'#2CB67D'},
               {label:'Carbs',   val:p.carb,  line:'#4A90D9'},
-              {label:'Fat',     val:p.fat,   line:'#E05252'},
+              {label:'Good Fat', val:p.fat,   line:'#D4A017'},
               {label:'Fibre',   val:p.fibre, line:'#C8A24A'},
             ].map(m=>(
               <div key={m.label} style={{
@@ -678,7 +678,7 @@ export default function DetailPage() {
                   {[
                     { val:p.pro,   line:'#2CB67D', label:'Protein' },
                     { val:p.carb,  line:'#4A90D9', label:'Carbs'   },
-                    { val:p.fat,   line:'#E05252', label:'Fat'     },
+                    { val:p.fat,   line:'#D4A017', label:'Good Fat' },
                     { val:p.fibre, line:'#C8A24A', label:'Fibre'   },
                   ].map(m => (
                     <div key={m.label} style={{ background:'#fff', borderRadius:14, padding:'16px 14px 18px', textAlign:'center', boxShadow:'0 1px 8px rgba(76,29,149,0.08)', position:'relative', overflow:'hidden' }}>
