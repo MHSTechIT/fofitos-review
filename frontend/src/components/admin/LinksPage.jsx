@@ -211,7 +211,7 @@ export default function LinksPage() {
                       <button onClick={addVideo} style={{ background:'transparent', border:'1px dashed var(--purple)', color:'var(--purple)', borderRadius:8, padding:'4px 10px', fontSize:'0.72rem', fontWeight:600, cursor:'pointer' }}>+ Add Video</button>
                     </div>
                     <div style={{ fontSize:'0.7rem', color:'var(--muted)', marginBottom:10 }}>
-                      Carousel size: 1920 × 810 px · ratio 64:27 (desktop) / 16:9 (mobile)
+                      Carousel size: 1920 × 810 px · ratio 64:27 (desktop &amp; mobile)
                     </div>
                     {(form.media_videos || []).length === 0 && (
                       <p style={{ fontSize:'0.72rem', color:'var(--muted)', margin:0 }}>No videos added.</p>
